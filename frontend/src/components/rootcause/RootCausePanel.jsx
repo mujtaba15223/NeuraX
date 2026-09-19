@@ -46,7 +46,7 @@ function RootCausePanel({ data }) {
           <span>Detected Defect</span>
 
           <strong>
-            {data.defect || "N/A"}
+            {data.defect || data.defect_type || "N/A"}
           </strong>
         </div>
 

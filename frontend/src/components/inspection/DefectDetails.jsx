@@ -10,6 +10,9 @@ function DefectDetails({
   anomalyScore,
   threshold,
   defectType,
+  classificationConfidence,
+  prototypeSimilarity,
+  classScores,
   likelyCause,
 }) {
   const isDefective =
@@ -77,7 +80,51 @@ function DefectDetails({
           <div>
             <span>Inspection Threshold</span>
             <strong>
+
+        {isDefective && defectType && (
+          <div className="detail-item">
+            <div className="detail-icon">
+              <Search size={20} />
+            </div>
+
+            <div>
+              <span>Classification Confidence</span>
+              <strong>
+                {classificationConfidence == null
+                  ? "Not available"
+                  : `${(
+                      Number(classificationConfidence) * 100
+                    ).toFixed(1)}%`}
+              </strong>
+            </div>
+          </div>
+        )}
               {limit.toFixed(2)}
+
+      {isDefective && Object.keys(classScores || {}).length > 0 && (
+        <div className="defect-investigation">
+          <span className="header-label">
+            PROTOTYPE CLASS SCORES
+          </span>
+
+          <div className="impact-list">
+            {Object.entries(classScores).map(
+              ([label, value]) => (
+                <div key={label}>
+                  <span>{label}</span>
+                  <strong>{Number(value).toFixed(4)}</strong>
+                </div>
+              )
+            )}
+          </div>
+
+          <small className="causality-note">
+            Classification uses similarity to stored defect prototypes; it
+            is an investigation aid, not a supervised defect classifier.
+            Prototype similarity: {Number(prototypeSimilarity ?? 0).toFixed(4)}
+          </small>
+        </div>
+      )}
             </strong>
           </div>
         </div>

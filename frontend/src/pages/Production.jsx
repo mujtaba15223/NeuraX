@@ -39,8 +39,15 @@ function Production() {
     );
   }
 
-  const stations =
-    data?.process?.process_analysis || [];
+  const stations = Array.isArray(data?.process?.analysis)
+    ? data.process.analysis
+    : Array.isArray(data?.process?.process_analysis)
+      ? data.process.process_analysis
+      : Array.isArray(data?.process_analysis)
+        ? data.process_analysis
+        : [];
+
+  const production = data?.production || {};
 
   const formatNumber = (value) =>
     Number(value ?? 0).toLocaleString("en-IN", {
@@ -77,6 +84,28 @@ function Production() {
       </section>
 
       <section className="dashboard-grid">
+        <div className="dashboard-card">
+          <div className="card-header">
+            <div>
+              <span className="header-label">MODEL 1</span>
+              <h3>Production Summary</h3>
+            </div>
+            <Factory size={22} />
+          </div>
+          <div className="analysis-highlight">
+            <span>Total Parts</span>
+            <strong>{formatNumber(production.total_parts)}</strong>
+          </div>
+          <div className="analysis-highlight">
+            <span>Average Throughput</span>
+            <strong>{formatNumber(production.average_parts_per_hour)}/hr</strong>
+          </div>
+          <div className="analysis-highlight">
+            <span>Average Demand</span>
+            <strong>{formatNumber(production.average_demand)}</strong>
+          </div>
+        </div>
+
         {stations.map((station) => (
           <div
             className="dashboard-card"

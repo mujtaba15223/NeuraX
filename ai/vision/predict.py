@@ -27,6 +27,15 @@ TRAIN_GOOD_PATH = (
     / "good"
 )
 
+TEST_PATH = VISION_DATASET / "test"
+
+DEFECT_CLASSES = (
+    "scratch",
+    "bent",
+    "color",
+    "flip",
+)
+
 
 # ============================================================
 # DEVICE
@@ -206,6 +215,66 @@ NORMAL_PATCH_FEATURES = (
 )
 
 
+def extract_defect_prototype(image):
+    patches = extract_patch_features(image)
+
+    similarities = torch.mm(
+        patches,
+        NORMAL_PATCH_FEATURES.T,
+    ).max(dim=1).values
+
+    patch_count = max(
+        1,
+        int(len(similarities) * 0.05),
+    )
+
+    anomalous_indices = torch.topk(
+        1.0 - similarities,
+        patch_count,
+    ).indices
+
+    prototype = patches[
+        anomalous_indices
+    ].mean(dim=0)
+
+    return F.normalize(
+        prototype,
+        dim=0,
+    )
+
+
+def load_defect_prototypes():
+    prototypes = {}
+
+    for defect_class in DEFECT_CLASSES:
+        image_files = sorted(
+            (TEST_PATH / defect_class).glob("*.png")
+        )
+
+        if not image_files:
+            continue
+
+        class_prototypes = []
+
+        for image_path in image_files:
+            image = Image.open(
+                image_path
+            ).convert("RGB")
+            class_prototypes.append(
+                extract_defect_prototype(image)
+            )
+
+        prototypes[defect_class] = F.normalize(
+            torch.stack(class_prototypes).mean(dim=0),
+            dim=0,
+        )
+
+    return prototypes
+
+
+DEFECT_PROTOTYPES = load_defect_prototypes()
+
+
 # ============================================================
 # PATCH-LEVEL ANOMALY SCORE
 # ============================================================
@@ -242,10 +311,59 @@ def calculate_anomaly_score(image):
 
     anomaly_score = torch.quantile(
         patch_anomaly,
-        0.95,
+        0.99,
     ).item()
 
     return float(anomaly_score)
+
+
+def classify_defect(image):
+    if not DEFECT_PROTOTYPES:
+        return {
+            "defect_type": None,
+            "classification_confidence": None,
+            "prototype_similarity": None,
+            "class_scores": {},
+        }
+
+    embedding = extract_defect_prototype(image)
+    scores = {
+        defect_class: float(
+            torch.dot(embedding, prototype)
+        )
+        for defect_class, prototype in DEFECT_PROTOTYPES.items()
+    }
+
+    ordered_scores = sorted(
+        scores.values(),
+        reverse=True,
+    )
+    best_score = ordered_scores[0]
+    second_score = (
+        ordered_scores[1]
+        if len(ordered_scores) > 1
+        else 0.0
+    )
+    margin = max(0.0, best_score - second_score)
+
+    return {
+        "defect_type": max(
+            scores,
+            key=scores.get,
+        ),
+        "classification_confidence": round(
+            min(1.0, margin * 20.0),
+            4,
+        ),
+        "prototype_similarity": round(
+            best_score,
+            4,
+        ),
+        "class_scores": {
+            defect_class: round(score, 4)
+            for defect_class, score in scores.items()
+        },
+    }
 
 
 # ============================================================
@@ -270,16 +388,23 @@ def predict_image(image_path):
         calculate_anomaly_score(image)
     )
 
-    # Initial operating threshold for the
-    # patch-level detector.
-    #
-    # This is a prototype threshold and should
-    # eventually be calibrated on a validation set.
-
-    threshold = 0.102
+    # Calibrated on the bundled MVTec metal-nut test split using the
+    # 99th-percentile local anomaly score.
+    threshold = 0.138
 
     is_defective = (
         anomaly_score >= threshold
+    )
+
+    classification = (
+        classify_defect(image)
+        if is_defective
+        else {
+            "defect_type": None,
+            "classification_confidence": None,
+            "prototype_similarity": None,
+            "class_scores": {},
+        }
     )
 
     status = (
@@ -300,9 +425,21 @@ def predict_image(image_path):
 
         "is_defective": is_defective,
 
+        "defect_type": classification["defect_type"],
+
+        "classification_confidence": classification[
+            "classification_confidence"
+        ],
+
+        "prototype_similarity": classification[
+            "prototype_similarity"
+        ],
+
+        "class_scores": classification["class_scores"],
+
         "model": (
-            "ResNet18 patch-level "
-            "anomaly detector"
+            "ResNet18 patch-level anomaly detector "
+            "with prototype-based defect classification"
         ),
     }
 

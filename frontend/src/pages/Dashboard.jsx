@@ -40,10 +40,16 @@ function Dashboard() {
     );
   }
 
-  const processData = data?.process?.process_analysis || [];
-  const topProcess = data?.process?.top_process_candidate;
-  const rootCause = data?.root_cause;
-  const impact = data?.production_impact;
+  const processData = Array.isArray(data?.process?.analysis)
+    ? data.process.analysis
+    : Array.isArray(data?.process?.process_analysis)
+      ? data.process.process_analysis
+      : Array.isArray(data?.process_analysis)
+        ? data.process_analysis
+        : [];
+  const topProcess = data?.process?.top_process_candidate || data?.top_process_candidate || processData[0] || null;
+  const rootCause = data?.root_cause || {};
+  const impact = data?.economics || data?.production_impact || {};
 
   const productionVolume = impact?.total_parts ?? 0;
   const averageThroughput = impact?.average_parts_per_hour ?? 0;

@@ -126,20 +126,27 @@ function Inspection() {
     setError("");
   };
 
+  const inspectionResult =
+    result?.inspection || result?.vision || result || {};
+
+  const isDefective = Boolean(
+    inspectionResult?.is_defective
+  );
+
   const status =
-    result?.status ||
-    (result?.is_defective
-      ? "DEFECTIVE"
-      : null);
+    result
+      ? inspectionResult?.status ||
+        (isDefective ? "DEFECTIVE" : "GOOD")
+      : null;
 
   const anomalyScore =
-    result?.anomaly_score ?? 0;
+    inspectionResult?.anomaly_score ?? 0;
 
   const threshold =
-    result?.threshold ?? 0.05;
+    inspectionResult?.threshold ?? 0.138;
 
   const model =
-    result?.model ||
+    inspectionResult?.model ||
     "ResNet18 feature anomaly detector";
 
   const confidence =
@@ -152,10 +159,6 @@ function Inspection() {
           )
         )
       : 0;
-
-  const isDefective =
-    status?.toLowerCase() ===
-    "defective";
 
   return (
     <div className="page-container">
@@ -340,7 +343,16 @@ function Inspection() {
             anomalyScore={anomalyScore}
             threshold={threshold}
             defectType={
-              result?.defect_type
+              inspectionResult?.defect_type
+            }
+            classificationConfidence={
+              inspectionResult?.classification_confidence
+            }
+            prototypeSimilarity={
+              inspectionResult?.prototype_similarity
+            }
+            classScores={
+              inspectionResult?.class_scores
             }
             likelyCause={
               result?.likely_cause

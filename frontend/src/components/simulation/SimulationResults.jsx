@@ -69,7 +69,7 @@ function SimulationResults({ result }) {
         <div className="analysis-highlight">
           <span>Projected Queue</span>
           <strong>
-            {formatNumber(result.projected_queue)}
+            {formatNumber(result.after?.queue ?? result.projected_queue ?? 0)}
           </strong>
         </div>
 
@@ -77,7 +77,7 @@ function SimulationResults({ result }) {
           <span>Projected Utilization</span>
           <strong>
             {formatPercent(
-              Number(result.projected_utilization ?? 0) * 100
+              Number(result.after?.utilization ?? result.projected_utilization ?? 0) * 100
             )}
           </strong>
         </div>
@@ -86,7 +86,7 @@ function SimulationResults({ result }) {
           <span>Projected Throughput</span>
           <strong>
             {formatNumber(
-              result.projected_throughput
+              result.after?.throughput ?? result.projected_throughput ?? 0
             )}
             / hr
           </strong>

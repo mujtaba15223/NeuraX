@@ -46,17 +46,22 @@ function Simulation() {
     setRunning(true);
     setError("");
 
-    const processAnalysis =
-      analysis?.process?.process_analysis || {};
+    const processAnalysis = Array.isArray(analysis?.process?.analysis)
+      ? analysis.process.analysis
+      : Array.isArray(analysis?.process?.process_analysis)
+        ? analysis.process.process_analysis
+        : Array.isArray(analysis?.process_analysis)
+          ? analysis.process_analysis
+          : [];
 
     const stationData =
-      processAnalysis[station] || {};
+      processAnalysis.find((item) => item.station === station) || {};
 
     const baselineQueue =
-      Number(stationData.avg_queue ?? 0);
+      Number(stationData.avg_queue ?? stationData.queue_time ?? 0);
 
     const baselineUtilization =
-      Number(stationData.avg_utilization ?? 0);
+      Number(stationData.utilization ?? stationData.avg_utilization ?? 0);
 
     const baselineThroughput =
       Number(
@@ -113,7 +118,7 @@ function Simulation() {
 
     const baselineImpact =
       Number(
-        analysis?.impact?.total_estimated_impact ??
+        analysis?.economics?.total_estimated_impact ??
           analysis?.production_impact?.total_estimated_impact ??
           0
       );

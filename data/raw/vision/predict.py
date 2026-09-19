@@ -27,16 +27,24 @@ TRAIN_GOOD_PATH = (
     / "good"
 )
 
+TEST_PATH = (
+    VISION_DATASET
+    / "test"
+)
+
 
 # ============================================================
 # DEVICE
 # ============================================================
 
 DEVICE = torch.device(
-    "cuda" if torch.cuda.is_available() else "cpu"
+    "cuda" if torch.cuda.is_available()
+    else "cpu"
 )
 
-print(f"Using device: {DEVICE}")
+print(
+    f"Using device: {DEVICE}"
+)
 
 
 # ============================================================
@@ -45,14 +53,27 @@ print(f"Using device: {DEVICE}")
 
 transform = transforms.Compose(
     [
-        transforms.Resize((224, 224)),
+        transforms.Resize(
+            (224, 224)
+        ),
+
         transforms.Grayscale(
             num_output_channels=3
         ),
+
         transforms.ToTensor(),
+
         transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225],
+            mean=[
+                0.485,
+                0.456,
+                0.406,
+            ],
+            std=[
+                0.229,
+                0.224,
+                0.225,
+            ],
         ),
     ]
 )
@@ -64,9 +85,13 @@ transform = transforms.Compose(
 
 def create_model():
 
-    print("Loading ResNet18...")
+    print(
+        "Loading ResNet18..."
+    )
 
-    weights = models.ResNet18_Weights.DEFAULT
+    weights = (
+        models.ResNet18_Weights.DEFAULT
+    )
 
     backbone = models.resnet18(
         weights=weights
@@ -102,18 +127,58 @@ def extract_feature_map(image):
 
         x = MODEL.layer1(x)
 
-        # Layer 2 keeps spatial information.
-        # This is important for localized defects.
+        # Layer 2 preserves useful spatial information.
         x = MODEL.layer2(x)
 
     return x
 
 
 # ============================================================
+# GLOBAL FEATURE EXTRACTION
+# ============================================================
+
+def extract_global_feature(image):
+
+    tensor = transform(
+        image
+    ).unsqueeze(0)
+
+    tensor = tensor.to(DEVICE)
+
+    with torch.no_grad():
+
+        x = MODEL.conv1(tensor)
+        x = MODEL.bn1(x)
+        x = MODEL.relu(x)
+        x = MODEL.maxpool(x)
+
+        x = MODEL.layer1(x)
+        x = MODEL.layer2(x)
+        x = MODEL.layer3(x)
+        x = MODEL.layer4(x)
+
+        x = MODEL.avgpool(x)
+
+        x = torch.flatten(
+            x,
+            1,
+        )
+
+        x = F.normalize(
+            x,
+            dim=1,
+        )
+
+    return x.squeeze(0)
+
+
+# ============================================================
 # FEATURE NORMALIZATION
 # ============================================================
 
-def normalize_feature_map(feature_map):
+def normalize_feature_map(
+    feature_map
+):
 
     return F.normalize(
         feature_map,
@@ -128,7 +193,9 @@ def normalize_feature_map(feature_map):
 def load_normal_features():
 
     image_files = sorted(
-        TRAIN_GOOD_PATH.glob("*.png")
+        TRAIN_GOOD_PATH.glob(
+            "*.png"
+        )
     )
 
     print(
@@ -137,6 +204,7 @@ def load_normal_features():
     )
 
     if not image_files:
+
         raise RuntimeError(
             f"No training images found in: "
             f"{TRAIN_GOOD_PATH}"
@@ -155,12 +223,16 @@ def load_normal_features():
                 image_path
             ).convert("RGB")
 
-            feature_map = extract_feature_map(
-                image
+            feature_map = (
+                extract_feature_map(
+                    image
+                )
             )
 
-            feature_map = normalize_feature_map(
-                feature_map
+            feature_map = (
+                normalize_feature_map(
+                    feature_map
+                )
             )
 
             features.append(
@@ -185,12 +257,220 @@ print(
     "feature database..."
 )
 
-NORMAL_FEATURES = load_normal_features()
+NORMAL_FEATURES = (
+    load_normal_features()
+)
 
 print(
     "Normal feature database shape: "
     f"{tuple(NORMAL_FEATURES.shape)}"
 )
+
+
+# ============================================================
+# DEFECT CLASSES
+# ============================================================
+
+DEFECT_CLASSES = [
+    "bent",
+    "color",
+    "flip",
+    "scratch",
+]
+
+
+# ============================================================
+# BUILD DEFECT PROTOTYPES
+# ============================================================
+
+def build_defect_prototypes():
+
+    prototypes = {}
+
+    print()
+    print(
+        "Building defect class prototypes..."
+    )
+
+    for defect_class in DEFECT_CLASSES:
+
+        class_path = (
+            TEST_PATH
+            / defect_class
+        )
+
+        image_files = sorted(
+            class_path.glob(
+                "*.png"
+            )
+        )
+
+        if not image_files:
+
+            print(
+                f"WARNING: No images found "
+                f"for class '{defect_class}'."
+            )
+
+            continue
+
+        features = []
+
+        for image_path in image_files:
+
+            image = Image.open(
+                image_path
+            ).convert("RGB")
+
+            feature = (
+                extract_global_feature(
+                    image
+                )
+            )
+
+            features.append(
+                feature.cpu()
+            )
+
+        feature_matrix = torch.stack(
+            features
+        )
+
+        prototype = feature_matrix.mean(
+            dim=0
+        )
+
+        prototype = F.normalize(
+            prototype.unsqueeze(0),
+            dim=1,
+        ).squeeze(0)
+
+        prototypes[
+            defect_class
+        ] = prototype
+
+        print(
+            f"Prototype created: "
+            f"{defect_class} "
+            f"({len(image_files)} images)"
+        )
+
+    if not prototypes:
+
+        raise RuntimeError(
+            "No defect prototypes could be created."
+        )
+
+    print(
+        "Defect prototypes ready."
+    )
+
+    return prototypes
+
+
+DEFECT_PROTOTYPES = (
+    build_defect_prototypes()
+)
+
+
+# ============================================================
+# CLASSIFY DEFECT TYPE
+# ============================================================
+
+def classify_defect(image):
+
+    feature = extract_global_feature(
+        image
+    )
+
+    scores = {}
+
+    for (
+        defect_class,
+        prototype,
+    ) in DEFECT_PROTOTYPES.items():
+
+        similarity = F.cosine_similarity(
+            feature.unsqueeze(0),
+            prototype.unsqueeze(0),
+            dim=1,
+        ).item()
+
+        scores[
+            defect_class
+        ] = float(similarity)
+
+    if not scores:
+
+        return {
+            "defect_type": None,
+            "classification_confidence": 0.0,
+            "class_scores": {},
+        }
+
+    sorted_scores = sorted(
+        scores.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
+    best_class = (
+        sorted_scores[0][0]
+    )
+
+    best_score = (
+        sorted_scores[0][1]
+    )
+
+    # Convert cosine similarity into a
+    # relative prototype score.
+    score_values = torch.tensor(
+        list(scores.values()),
+        dtype=torch.float32,
+    )
+
+    normalized_scores = torch.softmax(
+        score_values * 10.0,
+        dim=0,
+    )
+
+    class_names = list(
+        scores.keys()
+    )
+
+    confidence_index = (
+        class_names.index(
+            best_class
+        )
+    )
+
+    classification_confidence = (
+        normalized_scores[
+            confidence_index
+        ].item()
+    )
+
+    return {
+        "defect_type": best_class,
+
+        "classification_confidence": round(
+            classification_confidence,
+            4,
+        ),
+
+        "prototype_similarity": round(
+            best_score,
+            4,
+        ),
+
+        "class_scores": {
+            name: round(
+                score,
+                4,
+            )
+            for name, score in scores.items()
+        },
+    }
 
 
 # ============================================================
@@ -209,19 +489,24 @@ def calculate_normal_baseline():
         number_of_samples
     ):
 
-        current = NORMAL_FEATURES[
-            index:index + 1
-        ]
+        current = (
+            NORMAL_FEATURES[
+                index:index + 1
+            ]
+        )
 
         others = torch.cat(
             [
                 NORMAL_FEATURES[:index],
-                NORMAL_FEATURES[index + 1:],
+                NORMAL_FEATURES[
+                    index + 1:
+                ],
             ],
             dim=0,
         )
 
         if len(others) == 0:
+
             continue
 
         similarity = torch.einsum(
@@ -230,12 +515,15 @@ def calculate_normal_baseline():
             others,
         )
 
-        best_similarity = similarity.max(
-            dim=1
-        ).values
+        best_similarity = (
+            similarity.max(
+                dim=1
+            ).values
+        )
 
         distance = (
-            1.0 - best_similarity
+            1.0
+            - best_similarity
         )
 
         score = torch.quantile(
@@ -243,9 +531,12 @@ def calculate_normal_baseline():
             0.99,
         ).item()
 
-        normal_scores.append(score)
+        normal_scores.append(
+            score
+        )
 
     if not normal_scores:
+
         return 0.1
 
     baseline = torch.tensor(
@@ -257,9 +548,12 @@ def calculate_normal_baseline():
         0.995,
     ).item()
 
-    return float(threshold)
+    return float(
+        threshold
+    )
 
 
+print()
 print(
     "Calibrating anomaly threshold..."
 )
@@ -280,41 +574,54 @@ print(
 
 def calculate_anomaly_score(image):
 
-    feature_map = extract_feature_map(
-        image
+    feature_map = (
+        extract_feature_map(
+            image
+        )
     )
 
-    feature_map = normalize_feature_map(
-        feature_map
+    feature_map = (
+        normalize_feature_map(
+            feature_map
+        )
     )
 
     normal_features = (
-        NORMAL_FEATURES.to(DEVICE)
+        NORMAL_FEATURES.to(
+            DEVICE
+        )
     )
 
-    # Compare every spatial location of the
-    # inspected image against normal references.
+    # Compare every spatial location
+    # against normal references.
     similarities = torch.einsum(
         "nchw,mchw->nmhw",
         feature_map,
         normal_features,
     )
 
-    best_similarity = similarities.max(
-        dim=1
-    ).values
-
-    anomaly_map = (
-        1.0 - best_similarity
+    best_similarity = (
+        similarities.max(
+            dim=1
+        ).values
     )
 
-    # Ignore the extreme single-pixel response
-    # and focus on the strongest localized regions.
-    flattened = anomaly_map.flatten()
+    anomaly_map = (
+        1.0
+        - best_similarity
+    )
 
+    flattened = (
+        anomaly_map.flatten()
+    )
+
+    # Focus on the strongest localized regions.
     top_k = max(
         1,
-        int(flattened.numel() * 0.02),
+        int(
+            flattened.numel()
+            * 0.02
+        ),
     )
 
     top_values = torch.topk(
@@ -326,29 +633,42 @@ def calculate_anomaly_score(image):
         top_values.mean().item()
     )
 
-    return float(anomaly_score)
+    return float(
+        anomaly_score
+    )
 
 
 # ============================================================
 # IMAGE PREDICTION
 # ============================================================
 
-def predict_image(image_path):
+def predict_image(
+    image_path
+):
 
-    image_path = Path(image_path)
+    image_path = Path(
+        image_path
+    )
 
     if not image_path.exists():
 
         raise FileNotFoundError(
-            f"Image not found: {image_path}"
+            f"Image not found: "
+            f"{image_path}"
         )
 
     image = Image.open(
         image_path
     ).convert("RGB")
 
+    # --------------------------------------------------------
+    # STEP 1 — ANOMALY DETECTION
+    # --------------------------------------------------------
+
     anomaly_score = (
-        calculate_anomaly_score(image)
+        calculate_anomaly_score(
+            image
+        )
     )
 
     threshold = (
@@ -356,15 +676,53 @@ def predict_image(image_path):
     )
 
     is_defective = (
-        anomaly_score >= threshold
+        anomaly_score
+        >= threshold
     )
 
     if is_defective:
+
         status = "DEFECTIVE"
+
     else:
+
         status = "GOOD"
 
+
+    # --------------------------------------------------------
+    # STEP 2 — DEFECT CLASSIFICATION
+    # --------------------------------------------------------
+
+    classification = (
+        classify_defect(
+            image
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # STEP 3 — DEFECT TYPE
+    # --------------------------------------------------------
+
+    if is_defective:
+
+        defect_type = (
+            classification[
+                "defect_type"
+            ]
+        )
+
+    else:
+
+        defect_type = None
+
+
+    # --------------------------------------------------------
+    # STEP 4 — RESULT
+    # --------------------------------------------------------
+
     return {
+
         "status": status,
 
         "anomaly_score": round(
@@ -381,9 +739,38 @@ def predict_image(image_path):
             is_defective
         ),
 
+        "defect_type": (
+            defect_type
+        ),
+
+        "classification_confidence": (
+            classification[
+                "classification_confidence"
+            ]
+        ),
+
+        "prototype_similarity": (
+            classification.get(
+                "prototype_similarity"
+            )
+        ),
+
+        "class_scores": (
+            classification[
+                "class_scores"
+            ]
+        ),
+
         "model": (
             "ResNet18 localized "
-            "feature anomaly detector"
+            "feature anomaly detector "
+            "+ MVTec defect prototypes"
+        ),
+
+        "classification_method": (
+            "Prototype-based defect "
+            "classification using "
+            "MVTec metal_nut examples"
         ),
     }
 
@@ -417,12 +804,15 @@ if __name__ == "__main__":
     )
 
     print()
+
     print(
-        f"Image: {example_image.name}"
+        f"Image: "
+        f"{example_image.name}"
     )
 
     print(
-        f"Status: {result['status']}"
+        f"Status: "
+        f"{result['status']}"
     )
 
     print(
@@ -439,6 +829,37 @@ if __name__ == "__main__":
         f"Defective: "
         f"{result['is_defective']}"
     )
+
+    print(
+        f"Defect Type: "
+        f"{result['defect_type']}"
+    )
+
+    print(
+        "Classification Confidence: "
+        f"{result['classification_confidence']}"
+    )
+
+    print(
+        "Prototype Similarity: "
+        f"{result['prototype_similarity']}"
+    )
+
+    print(
+        "Class Scores:"
+    )
+
+    for (
+        defect_class,
+        score,
+    ) in result[
+        "class_scores"
+    ].items():
+
+        print(
+            f"  {defect_class}: "
+            f"{score}"
+        )
 
     print(
         f"Model: "

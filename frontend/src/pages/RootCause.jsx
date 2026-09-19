@@ -91,21 +91,25 @@ function RootCause() {
   }
 
   const rootCause = data?.root_cause || {};
-  const processAnalysis = data?.process?.process_analysis || {};
+  const processAnalysis = Array.isArray(data?.process?.analysis)
+    ? data.process.analysis
+    : Array.isArray(data?.process?.process_analysis)
+      ? data.process.process_analysis
+      : Array.isArray(data?.process_analysis)
+        ? data.process_analysis
+        : [];
 
-  const evidence = rootCause.evidence || {};
+  const evidence = rootCause.evidence || rootCause.process_evidence || {};
 
-  const factors = Object.entries(processAnalysis).map(
-    ([station, values]) => ({
-      station,
-      score: values?.pressure_score ?? 0,
-      queue_pressure: values?.queue_pressure ?? 0,
-      utilization_pressure: values?.utilization_pressure ?? 0,
-      queue: values?.avg_queue ?? 0,
-      utilization: values?.avg_utilization ?? 0,
-      rank: values?.rank ?? 0,
-    })
-  );
+  const factors = processAnalysis.map((values, index) => ({
+    station: values?.station || `Station ${index + 1}`,
+    score: values?.score ?? values?.pressure_score ?? values?.combined_pressure ?? 0,
+    queue_pressure: values?.queue_pressure ?? 0,
+    utilization_pressure: values?.utilization_pressure ?? 0,
+    queue: values?.avg_queue ?? values?.queue_time ?? 0,
+    utilization: values?.avg_utilization ?? values?.utilization ?? 0,
+    rank: values?.rank ?? index + 1,
+  }));
 
   factors.sort((a, b) => {
     if (a.rank && b.rank) {

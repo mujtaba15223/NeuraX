@@ -65,9 +65,11 @@ function ImpactComparison({ baseline, simulated }) {
     simulated.queue
   );
 
+  const baselineImpact = Number(baseline.impact ?? baseline.economic_impact ?? 0);
+  const simulatedImpact = Number(simulated.impact ?? simulated.economic_impact ?? 0);
   const impactChange = calculateChange(
-    baseline.economic_impact,
-    simulated.economic_impact
+    baselineImpact,
+    simulatedImpact
   );
 
   return (
@@ -128,7 +130,7 @@ function ImpactComparison({ baseline, simulated }) {
 
           <strong>
             {formatCurrency(
-              baseline.economic_impact
+              baselineImpact
             )}
           </strong>
         </div>
@@ -138,7 +140,7 @@ function ImpactComparison({ baseline, simulated }) {
 
           <strong>
             {formatCurrency(
-              simulated.economic_impact
+              simulatedImpact
             )}
           </strong>
         </div>
@@ -148,12 +150,7 @@ function ImpactComparison({ baseline, simulated }) {
 
           <strong>
             {formatCurrency(
-              Number(
-                baseline.economic_impact ?? 0
-              ) -
-                Number(
-                  simulated.economic_impact ?? 0
-                )
+              baselineImpact - simulatedImpact
             )}
           </strong>
         </div>

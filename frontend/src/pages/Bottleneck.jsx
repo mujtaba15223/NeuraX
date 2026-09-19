@@ -5,7 +5,8 @@ import {
   AlertTriangle,
   BarChart3,
 } from "lucide-react";
-import API_BASE_URL from "../config/api";
+
+import { getBottleneck } from "../services/api";
 
 function Bottleneck() {
   const [data, setData] = useState(null);
@@ -17,22 +18,13 @@ function Bottleneck() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(
-        `${API_BASE_URL}/process`
-      );
+      const result = await getBottleneck();
 
-      if (!response.ok) {
-        throw new Error(
-          "Failed to load bottleneck analysis"
-        );
-      }
-
-      const result = await response.json();
       setData(result);
     } catch (err) {
       setError(
         err.message ||
-          "Unable to connect to backend"
+          "Unable to connect to bottleneck analysis."
       );
     } finally {
       setLoading(false);
@@ -118,28 +110,11 @@ function Bottleneck() {
     );
   }
 
-  /*
-   * Backend response:
-   *
-   * {
-   *   "process_analysis": [
-   *     {
-   *       "station": "Drilling",
-   *       "avg_queue": ...,
-   *       "utilization": ...,
-   *       "queue_pressure": ...,
-   *       "utilization_pressure": ...,
-   *       "score": ...
-   *     }
-   *   ],
-   *   "top_process_candidate": {...}
-   * }
-   */
-
-  const processAnalysis =
-    Array.isArray(data?.process_analysis)
-      ? data.process_analysis
-      : [];
+  const processAnalysis = Array.isArray(
+    data?.stations
+  )
+    ? data.stations
+    : [];
 
   const stations = processAnalysis
     .map((values, index) => ({
@@ -148,7 +123,7 @@ function Bottleneck() {
         `Station ${index + 1}`,
 
       queue: Number(
-        values?.avg_queue ?? 0
+        values?.avg_queue ?? values?.queue_time ?? 0
       ),
 
       utilization: Number(
@@ -164,25 +139,49 @@ function Bottleneck() {
       ),
 
       score: Number(
-        values?.score ?? 0
+        values?.score ?? values?.pressure_score ?? 0
       ),
 
-      rank: index + 1,
+      rank:
+        Number(values?.rank) ||
+        index + 1,
     }))
-    .sort((a, b) => b.score - a.score)
+    .sort(
+      (a, b) => b.score - a.score
+    )
     .map((station, index) => ({
       ...station,
       rank: index + 1,
     }));
 
-  const backendTop =
-    data?.top_process_candidate;
-
   const topStation =
     stations[0] || null;
 
+  const defectAwareStations = Array.isArray(
+    data?.defect_aware_stations
+  )
+    ? data.defect_aware_stations
+        .map((values, index) => ({
+          station: values?.station || `Station ${index + 1}`,
+          score: Number(values?.defect_aware_score ?? 0),
+          adjustment: Number(values?.defect_adjustment ?? 1),
+        }))
+        .sort((a, b) => b.score - a.score)
+    : [];
+
+  const defectAwareTop = defectAwareStations[0] || null;
+
+  const activeTopStation =
+    defectAwareTop || topStation;
+
+  const isDefectAware = Boolean(
+    defectAwareTop
+  );
+
   return (
     <div className="page-container">
+
+      {/* HEADER */}
       <div className="page-header">
         <div>
           <span className="header-label">
@@ -193,8 +192,8 @@ function Bottleneck() {
 
           <p>
             Identify process stations with the
-            strongest combined queue and utilization
-            pressure.
+            strongest combined queue and
+            utilization pressure.
           </p>
         </div>
 
@@ -207,15 +206,20 @@ function Bottleneck() {
         </button>
       </div>
 
-      {topStation && (
+
+      {/* TOP PROCESS CANDIDATE */}
+      {activeTopStation && (
         <div className="dashboard-card bottleneck-highlight">
+
           <div className="highlight-icon">
             <AlertTriangle size={28} />
           </div>
 
           <div>
             <span className="header-label">
-              TOP PROCESS CANDIDATE
+              {isDefectAware
+                ? "DEFECT-AWARE PROCESS CANDIDATE"
+                : "BASE PROCESS CANDIDATE"}
             </span>
 
             <h2>
@@ -223,27 +227,34 @@ function Bottleneck() {
             </h2>
 
             <p>
-              This station currently has the highest
-              combined process-pressure score in the
-              analyzed production flow.
+              {isDefectAware
+                ? `For the detected ${data.defect_type} anomaly, this station has the strongest defect-aware relevance based on measured process pressure and engineering priors.`
+                : "This station currently has the highest measured combined process-pressure score in the production flow."}
             </p>
           </div>
 
           <div className="highlight-score">
-            <span>Pressure Score</span>
+            <span>
+              Pressure Score
+            </span>
 
             <strong>
-              {topStation.score.toFixed(3)}
+              {activeTopStation.score.toFixed(3)}
             </strong>
 
             <small>
-              Rank #{topStation.rank}
+              {isDefectAware
+                ? "Investigation signal"
+                : `Rank #${activeTopStation.rank}`}
             </small>
           </div>
+
         </div>
       )}
 
-      {!topStation && (
+
+      {/* NO DATA */}
+      {!activeTopStation && (
         <div className="dashboard-card">
           <div className="empty-state">
             <BarChart3 size={30} />
@@ -260,13 +271,55 @@ function Bottleneck() {
         </div>
       )}
 
+      {defectAwareStations.length > 0 && (
+        <div className="dashboard-card">
+          <div className="card-header">
+            <div>
+              <span className="header-label">
+                DEFECT-AWARE PROCESS RELEVANCE
+              </span>
+              <h3>
+                {data.defect_type || "Detected anomaly"} investigation signal
+              </h3>
+            </div>
+            <AlertTriangle size={22} />
+          </div>
+
+          <p>
+            This layer applies engineering priors to the measured process
+            pressure. It is an investigation hypothesis, not proof of cause.
+          </p>
+
+          <div className="impact-list">
+            {defectAwareStations.map((station) => (
+              <div key={station.station}>
+                <span>{station.station}</span>
+                <strong>{station.score.toFixed(3)}</strong>
+              </div>
+            ))}
+          </div>
+
+          {defectAwareTop && (
+            <small className="causality-note">
+              Strongest defect-aware process candidate: {defectAwareTop.station}.
+            </small>
+          )}
+        </div>
+      )}
+
+
+      {/* STATION CARDS */}
       <div className="dashboard-grid">
+
         {stations.map((station) => (
+
           <div
             className="dashboard-card station-card"
             key={station.station}
           >
+
             <div className="card-header">
+
               <div>
                 <span className="header-label">
                   STATION #{station.rank}
@@ -278,9 +331,12 @@ function Bottleneck() {
               </div>
 
               <Factory size={22} />
+
             </div>
 
+
             <div className="station-score">
+
               <span>
                 Pressure Score
               </span>
@@ -288,9 +344,12 @@ function Bottleneck() {
               <strong>
                 {station.score.toFixed(3)}
               </strong>
+
             </div>
 
+
             <div className="metric-row">
+
               <span>
                 Average Queue
               </span>
@@ -298,9 +357,12 @@ function Bottleneck() {
               <strong>
                 {station.queue.toFixed(3)}
               </strong>
+
             </div>
 
+
             <div className="metric-row">
+
               <span>
                 Utilization
               </span>
@@ -309,9 +371,12 @@ function Bottleneck() {
                 {(station.utilization * 100).toFixed(1)}
                 %
               </strong>
+
             </div>
 
+
             <div className="metric-row">
+
               <span>
                 Queue Pressure
               </span>
@@ -320,9 +385,12 @@ function Bottleneck() {
                 {(station.queuePressure * 100).toFixed(1)}
                 %
               </strong>
+
             </div>
 
+
             <div className="metric-row">
+
               <span>
                 Utilization Pressure
               </span>
@@ -333,14 +401,23 @@ function Bottleneck() {
                 ).toFixed(1)}
                 %
               </strong>
+
             </div>
+
           </div>
+
         ))}
+
       </div>
 
+
+      {/* COMPARISON TABLE */}
       {stations.length > 0 && (
+
         <div className="dashboard-card">
+
           <div className="card-header">
+
             <div>
               <span className="header-label">
                 PROCESS PRESSURE
@@ -352,10 +429,14 @@ function Bottleneck() {
             </div>
 
             <BarChart3 size={22} />
+
           </div>
 
+
           <div className="table-wrapper">
+
             <table className="data-table">
+
               <thead>
                 <tr>
                   <th>Rank</th>
@@ -368,9 +449,15 @@ function Bottleneck() {
                 </tr>
               </thead>
 
+
               <tbody>
+
                 {stations.map((station) => (
-                  <tr key={station.station}>
+
+                  <tr
+                    key={station.station}
+                  >
+
                     <td>
                       #{station.rank}
                     </td>
@@ -407,20 +494,31 @@ function Bottleneck() {
                         {station.score.toFixed(3)}
                       </strong>
                     </td>
+
                   </tr>
+
                 ))}
+
               </tbody>
+
             </table>
+
           </div>
+
         </div>
+
       )}
 
+
+      {/* CAUSALITY WARNING */}
       <div className="dashboard-card causality-warning">
+
         <div className="warning-icon">
           <AlertTriangle size={20} />
         </div>
 
         <div>
+
           <strong>
             Bottleneck Interpretation
           </strong>
@@ -432,8 +530,11 @@ function Bottleneck() {
             not by itself prove that the station is
             the cause of a product defect.
           </p>
+
         </div>
+
       </div>
+
     </div>
   );
 }
