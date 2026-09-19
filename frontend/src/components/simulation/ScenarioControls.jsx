@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FlaskConical, Play } from "lucide-react";
 
-function ScenarioControls({ onRun }) {
+function ScenarioControls({ onRun, running = false }) {
   const [station, setStation] = useState("Drilling");
   const [scenario, setScenario] = useState(
     "Reduce Queue Time"
@@ -177,9 +177,19 @@ function ScenarioControls({ onRun }) {
         <button
           className="primary-button"
           onClick={handleRun}
+          disabled={running}
         >
-          <Play size={17} />
-          Run Simulation
+          {running ? (
+            <>
+              <Play size={17} className="spin" />
+              Running Simulation...
+            </>
+          ) : (
+            <>
+              <Play size={17} />
+              Run Simulation
+            </>
+          )}
         </button>
       </div>
     </div>

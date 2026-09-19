@@ -38,13 +38,17 @@ function Simulation() {
     fetchAnalysis();
   }, []);
 
-  const runSimulation = ({ station, scenario, improvement }) => {
+  const runSimulation = async ({ station, scenario, improvement }) => {
     if (!analysis) {
       return;
     }
 
     setRunning(true);
     setError("");
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 350);
+    });
 
     const processAnalysis = Array.isArray(analysis?.process?.analysis)
       ? analysis.process.analysis
@@ -288,6 +292,7 @@ function Simulation() {
 
         <ScenarioControls
           onRun={runSimulation}
+          running={running}
         />
 
         {running && (
