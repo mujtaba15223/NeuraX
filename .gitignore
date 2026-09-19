@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data
+data/raw/*
+!data/raw/model1/
+!data/raw/model2/
+!data/raw/vision/
+
+# Models / generated files
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.joblib
+
+# Logs
+*.log
+
+# Node
+node_modules/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
