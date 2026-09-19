@@ -1,0 +1,441 @@
+import { useEffect, useState } from "react";
+import {
+  RefreshCw,
+  Factory,
+  AlertTriangle,
+  BarChart3,
+} from "lucide-react";
+import API_BASE_URL from "../config/api";
+
+function Bottleneck() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const fetchAnalysis = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch(
+        `${API_BASE_URL}/process`
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          "Failed to load bottleneck analysis"
+        );
+      }
+
+      const result = await response.json();
+      setData(result);
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to connect to backend"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnalysis();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="page-container">
+        <div className="page-header">
+          <div>
+            <span className="header-label">
+              BOTTLENECK ANALYTICS
+            </span>
+
+            <h1>Production Bottlenecks</h1>
+
+            <p>
+              Analyze queue pressure, utilization,
+              and production flow constraints.
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="empty-state">
+            <RefreshCw
+              size={28}
+              className="spin"
+            />
+
+            <p>
+              Analyzing production stations...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="page-container">
+        <div className="page-header">
+          <div>
+            <span className="header-label">
+              BOTTLENECK ANALYTICS
+            </span>
+
+            <h1>Production Bottlenecks</h1>
+
+            <p>
+              Analyze queue pressure, utilization,
+              and production flow constraints.
+            </p>
+          </div>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="empty-state">
+            <AlertTriangle size={30} />
+
+            <h3>
+              Analysis Unavailable
+            </h3>
+
+            <p>{error}</p>
+
+            <button
+              className="action-button"
+              onClick={fetchAnalysis}
+            >
+              <RefreshCw size={16} />
+              Retry Analysis
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * Backend response:
+   *
+   * {
+   *   "process_analysis": [
+   *     {
+   *       "station": "Drilling",
+   *       "avg_queue": ...,
+   *       "utilization": ...,
+   *       "queue_pressure": ...,
+   *       "utilization_pressure": ...,
+   *       "score": ...
+   *     }
+   *   ],
+   *   "top_process_candidate": {...}
+   * }
+   */
+
+  const processAnalysis =
+    Array.isArray(data?.process_analysis)
+      ? data.process_analysis
+      : [];
+
+  const stations = processAnalysis
+    .map((values, index) => ({
+      station:
+        values?.station ||
+        `Station ${index + 1}`,
+
+      queue: Number(
+        values?.avg_queue ?? 0
+      ),
+
+      utilization: Number(
+        values?.utilization ?? 0
+      ),
+
+      queuePressure: Number(
+        values?.queue_pressure ?? 0
+      ),
+
+      utilizationPressure: Number(
+        values?.utilization_pressure ?? 0
+      ),
+
+      score: Number(
+        values?.score ?? 0
+      ),
+
+      rank: index + 1,
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map((station, index) => ({
+      ...station,
+      rank: index + 1,
+    }));
+
+  const backendTop =
+    data?.top_process_candidate;
+
+  const topStation =
+    stations[0] || null;
+
+  return (
+    <div className="page-container">
+      <div className="page-header">
+        <div>
+          <span className="header-label">
+            BOTTLENECK ANALYTICS
+          </span>
+
+          <h1>Production Bottlenecks</h1>
+
+          <p>
+            Identify process stations with the
+            strongest combined queue and utilization
+            pressure.
+          </p>
+        </div>
+
+        <button
+          className="action-button"
+          onClick={fetchAnalysis}
+        >
+          <RefreshCw size={16} />
+          Refresh Analysis
+        </button>
+      </div>
+
+      {topStation && (
+        <div className="dashboard-card bottleneck-highlight">
+          <div className="highlight-icon">
+            <AlertTriangle size={28} />
+          </div>
+
+          <div>
+            <span className="header-label">
+              TOP PROCESS CANDIDATE
+            </span>
+
+            <h2>
+              {topStation.station}
+            </h2>
+
+            <p>
+              This station currently has the highest
+              combined process-pressure score in the
+              analyzed production flow.
+            </p>
+          </div>
+
+          <div className="highlight-score">
+            <span>Pressure Score</span>
+
+            <strong>
+              {topStation.score.toFixed(3)}
+            </strong>
+
+            <small>
+              Rank #{topStation.rank}
+            </small>
+          </div>
+        </div>
+      )}
+
+      {!topStation && (
+        <div className="dashboard-card">
+          <div className="empty-state">
+            <BarChart3 size={30} />
+
+            <h3>
+              No Process Data
+            </h3>
+
+            <p>
+              The backend returned no station-level
+              bottleneck analysis.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="dashboard-grid">
+        {stations.map((station) => (
+          <div
+            className="dashboard-card station-card"
+            key={station.station}
+          >
+            <div className="card-header">
+              <div>
+                <span className="header-label">
+                  STATION #{station.rank}
+                </span>
+
+                <h3>
+                  {station.station}
+                </h3>
+              </div>
+
+              <Factory size={22} />
+            </div>
+
+            <div className="station-score">
+              <span>
+                Pressure Score
+              </span>
+
+              <strong>
+                {station.score.toFixed(3)}
+              </strong>
+            </div>
+
+            <div className="metric-row">
+              <span>
+                Average Queue
+              </span>
+
+              <strong>
+                {station.queue.toFixed(3)}
+              </strong>
+            </div>
+
+            <div className="metric-row">
+              <span>
+                Utilization
+              </span>
+
+              <strong>
+                {(station.utilization * 100).toFixed(1)}
+                %
+              </strong>
+            </div>
+
+            <div className="metric-row">
+              <span>
+                Queue Pressure
+              </span>
+
+              <strong>
+                {(station.queuePressure * 100).toFixed(1)}
+                %
+              </strong>
+            </div>
+
+            <div className="metric-row">
+              <span>
+                Utilization Pressure
+              </span>
+
+              <strong>
+                {(
+                  station.utilizationPressure * 100
+                ).toFixed(1)}
+                %
+              </strong>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {stations.length > 0 && (
+        <div className="dashboard-card">
+          <div className="card-header">
+            <div>
+              <span className="header-label">
+                PROCESS PRESSURE
+              </span>
+
+              <h3>
+                Station Comparison
+              </h3>
+            </div>
+
+            <BarChart3 size={22} />
+          </div>
+
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Station</th>
+                  <th>Avg Queue</th>
+                  <th>Utilization</th>
+                  <th>Queue Pressure</th>
+                  <th>Util. Pressure</th>
+                  <th>Score</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {stations.map((station) => (
+                  <tr key={station.station}>
+                    <td>
+                      #{station.rank}
+                    </td>
+
+                    <td>
+                      <strong>
+                        {station.station}
+                      </strong>
+                    </td>
+
+                    <td>
+                      {station.queue.toFixed(3)}
+                    </td>
+
+                    <td>
+                      {(station.utilization * 100).toFixed(1)}
+                      %
+                    </td>
+
+                    <td>
+                      {(station.queuePressure * 100).toFixed(1)}
+                      %
+                    </td>
+
+                    <td>
+                      {(
+                        station.utilizationPressure * 100
+                      ).toFixed(1)}
+                      %
+                    </td>
+
+                    <td>
+                      <strong>
+                        {station.score.toFixed(3)}
+                      </strong>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="dashboard-card causality-warning">
+        <div className="warning-icon">
+          <AlertTriangle size={20} />
+        </div>
+
+        <div>
+          <strong>
+            Bottleneck Interpretation
+          </strong>
+
+          <p>
+            A high pressure score identifies a
+            process constraint candidate based on
+            queue and utilization evidence. It does
+            not by itself prove that the station is
+            the cause of a product defect.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default Bottleneck;
