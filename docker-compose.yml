@@ -1,0 +1,40 @@
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+
+    container_name: secret-leak-backend
+
+    ports:
+      - "8080:8080"
+
+    restart: unless-stopped
+
+    networks:
+      - app-network
+
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: secret-leak-frontend
+
+    ports:
+      - "3000:80"
+
+    depends_on:
+      - backend
+
+    restart: unless-stopped
+
+    networks:
+      - app-network
+
+
+networks:
+  app-network:
+    driver: bridge

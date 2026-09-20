@@ -11,7 +11,7 @@ The React SPA fallback is configured in `frontend/vercel.json`, so refreshing ro
 
 ### Backend
 
-Deploy the FastAPI backend on Render using the included `render.yaml`, or on another Python host that supports PyTorch. Start it with:
+Vercel does not start the FastAPI server from `vercel.json`. Deploy the backend separately on Render using the included [render.yaml](render.yaml), or on another Python host that supports PyTorch. The backend start command is:
 
 ```text
 uvicorn backend.main:app --host 0.0.0.0 --port $PORT
@@ -27,3 +27,17 @@ Vercel React frontend --VITE_API_URL--> Render FastAPI backend
 ```
 
 Vercel cannot reliably host this backend as a frontend deployment because the inspection service loads PyTorch and the local vision dataset. The repository root still contains both services, with Vercel and Render deploying their respective folders from the same repository.
+
+### Deployment connection
+
+1. Deploy the repository's backend service on Render using `render.yaml`.
+2. Set Render's `FRONTEND_ORIGIN` to the deployed Vercel URL.
+3. Set Vercel's `VITE_API_URL` to the Render backend URL, for example `https://industrial-defect-root-cause-api.onrender.com`.
+4. Deploy the frontend on Vercel using the root `vercel.json`.
+
+Local commands are:
+
+```text
+python -m uvicorn backend.main:app --reload
+npm run dev --prefix frontend
+```
