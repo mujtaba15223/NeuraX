@@ -58,8 +58,8 @@ function ScenarioControls({ onRun, running = false }) {
               width: "100%",
               padding: "11px 12px",
               borderRadius: "8px",
-              border: "1px solid #263442",
-              background: "#0b1118",
+              border: "1px solid var(--border)",
+              background: "var(--card-dark)",
               color: "inherit",
             }}
           >
@@ -99,8 +99,8 @@ function ScenarioControls({ onRun, running = false }) {
               width: "100%",
               padding: "11px 12px",
               borderRadius: "8px",
-              border: "1px solid #263442",
-              background: "#0b1118",
+              border: "1px solid var(--border)",
+              background: "var(--card-dark)",
               color: "inherit",
             }}
           >

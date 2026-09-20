@@ -20,8 +20,8 @@ function StatCard({ label, value, description, icon, trend }) {
               alignItems: "center",
               justifyContent: "center",
               borderRadius: "8px",
-              background: "#15283a",
-              color: "#4db3ff",
+              background: "var(--accent-soft)",
+              color: "var(--accent)",
             }}
           >
             {icon}
@@ -44,7 +44,7 @@ function StatCard({ label, value, description, icon, trend }) {
         {trend && (
           <small
             style={{
-              color: trend.type === "positive" ? "#53d68a" : "#f0a35b",
+              color: trend.type === "positive" ? "var(--success)" : "var(--warning)",
               fontWeight: 600,
             }}
           >

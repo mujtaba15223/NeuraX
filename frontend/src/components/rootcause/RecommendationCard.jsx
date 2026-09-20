@@ -44,8 +44,8 @@ function RecommendationCard({ recommendation }) {
         style={{
           padding: "18px",
           borderRadius: "10px",
-          background: "#0b1118",
-          border: "1px solid #263442",
+          background: "var(--card-dark)",
+          border: "1px solid var(--border)",
         }}
       >
         <div

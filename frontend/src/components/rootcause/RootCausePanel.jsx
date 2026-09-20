@@ -67,8 +67,8 @@ function RootCausePanel({ data }) {
           marginTop: "18px",
           padding: "16px",
           borderRadius: "10px",
-          background: "#0b1118",
-          border: "1px solid #263442",
+          background: "var(--card-dark)",
+          border: "1px solid var(--border)",
         }}
       >
         <span className="header-label">

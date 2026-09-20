@@ -14,10 +14,10 @@ function Dashboard() {
 
   if (loading) {
     return (
-      <main className="page-content">
-        <section className="welcome-section">
+      <main className="page-container">
+        <section className="page-header">
           <span className="header-label">SYSTEM ANALYSIS</span>
-          <h2>Loading industrial analysis...</h2>
+          <h1>Loading industrial analysis...</h1>
           <p>Connecting to the AI decision-support backend.</p>
         </section>
       </main>
@@ -26,10 +26,10 @@ function Dashboard() {
 
   if (error) {
     return (
-      <main className="page-content">
-        <section className="welcome-section">
+      <main className="page-container">
+        <section className="page-header">
           <span className="header-label">SYSTEM ERROR</span>
-          <h2>Unable to load analysis</h2>
+          <h1>Unable to load analysis</h1>
           <p>{error}</p>
 
           <button className="primary-button" onClick={refresh}>
@@ -72,11 +72,11 @@ function Dashboard() {
     })}`;
 
   return (
-    <main className="page-content">
-      <section className="welcome-section">
+    <main className="page-container">
+      <section className="page-header">
         <div>
           <span className="header-label">INDUSTRIAL OPERATIONS</span>
-          <h2>Production Intelligence Dashboard</h2>
+          <h1>Production Intelligence Dashboard</h1>
           <p>
             Unified view of production flow, process pressure, root-cause
             evidence, and estimated economic impact.

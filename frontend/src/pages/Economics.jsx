@@ -18,11 +18,18 @@ function Economics() {
 
   if (loading) {
     return (
-      <main className="page-content">
-        <section className="welcome-section">
-          <span className="section-label">PRODUCTION ECONOMICS</span>
-          <h1>Loading economic model...</h1>
-          <p>Calculating scrap, rework, and downtime exposure from the production data.</p>
+      <main className="page-container">
+        <section className="page-header">
+          <div>
+            <span className="header-label">
+              PRODUCTION ECONOMICS
+            </span>
+            <h1>Loading economic model...</h1>
+            <p>
+              Calculating scrap, rework, and downtime exposure from the
+              production data.
+            </p>
+          </div>
         </section>
       </main>
     );
@@ -30,28 +37,37 @@ function Economics() {
 
   if (error) {
     return (
-      <main className="page-content">
-        <section className="welcome-section">
-          <span className="section-label">PRODUCTION ECONOMICS</span>
-          <h1>Economic model unavailable</h1>
-          <p>{error}</p>
-          <button className="primary-button" onClick={refresh}>Retry</button>
+      <main className="page-container">
+        <section className="page-header">
+          <div>
+            <span className="header-label">
+              PRODUCTION ECONOMICS
+            </span>
+            <h1>Economic model unavailable</h1>
+            <p>{error}</p>
+            <button className="primary-button" onClick={refresh}>
+              Retry
+            </button>
+          </div>
         </section>
       </main>
     );
   }
 
   return (
-    <main className="page-content">
-      <section className="welcome-section">
-        <span className="section-label">PRODUCTION ECONOMICS</span>
+    <main className="page-container">
+      <section className="page-header">
+        <div>
+          <span className="header-label">PRODUCTION ECONOMICS</span>
 
-        <h1>Economic Impact</h1>
+          <h1>Economic Impact</h1>
 
-        <p>
-          Quantifying the estimated production impact of defects, scrap, rework,
-          and operational downtime from the current dataset and assumptions.
-        </p>
+          <p>
+            Quantifying the estimated production impact of defects, scrap,
+            rework, and operational downtime from the current dataset and
+            assumptions.
+          </p>
+        </div>
       </section>
 
       <section className="dashboard-grid">

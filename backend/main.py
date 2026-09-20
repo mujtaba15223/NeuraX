@@ -14,6 +14,13 @@ from ai.vision.predict import predict_image
 from ai.root_cause.root_cause_engine import (
     analyze_root_cause,
 )
+from backend.services.manufacturing_data import (
+    discover_station_columns,
+    export_headers,
+    numeric_mean,
+    numeric_sum,
+    resolve_production_columns,
+)
 
 
 # ============================================================
@@ -192,6 +199,10 @@ def calculate_process_analysis():
         return []
 
 
+    station_columns = discover_station_columns(
+        MODEL2_DATA
+    )
+
     station_values = {}
 
     max_queue = 0.0
@@ -203,45 +214,16 @@ def calculate_process_analysis():
     # Collect raw measurements
     # --------------------------------------------------------
 
-    for station, columns in STATIONS.items():
+    for station, columns in station_columns.items():
 
-        queue_column = columns["queue"]
-
-        utilization_column = columns[
-            "utilization"
-        ]
-
-
-        if queue_column not in MODEL2_DATA.columns:
-
-            print(
-                f"Missing column: {queue_column}"
-            )
-
-            continue
-
-
-        if utilization_column not in MODEL2_DATA.columns:
-
-            print(
-                f"Missing column: "
-                f"{utilization_column}"
-            )
-
-            continue
-
-
-        queue_value = safe_float(
-            MODEL2_DATA[
-                queue_column
-            ].mean()
+        queue_value = numeric_mean(
+            MODEL2_DATA,
+            columns["queue"],
         )
 
-
-        utilization_value = safe_float(
-            MODEL2_DATA[
-                utilization_column
-            ].mean()
+        utilization_value = numeric_mean(
+            MODEL2_DATA,
+            columns["utilization"],
         )
 
 
@@ -671,24 +653,45 @@ def calculate_production_summary():
         }
 
 
-    total_parts = safe_float(
-        MODEL1_DATA[
-            "Total parts"
-        ].sum()
+    columns = resolve_production_columns(
+        MODEL1_DATA
     )
 
+    missing = [
+        field
+        for field in (
+            "total_parts",
+            "parts_per_hour",
+            "demand",
+        )
+        if not columns[field]
+    ]
 
-    average_parts_per_hour = safe_float(
-        MODEL1_DATA[
-            "Parts per hour"
-        ].mean()
+    if missing:
+        return {
+            "status": "unavailable",
+            "message": (
+                "Required production fields are missing: "
+                + ", ".join(missing)
+            ),
+            "available_headers": export_headers(
+                MODEL1_DATA
+            ),
+        }
+
+    total_parts = numeric_sum(
+        MODEL1_DATA,
+        columns["total_parts"],
     )
 
+    average_parts_per_hour = numeric_mean(
+        MODEL1_DATA,
+        columns["parts_per_hour"],
+    )
 
-    average_demand = safe_float(
-        MODEL1_DATA[
-            "Demand"
-        ].mean()
+    average_demand = numeric_mean(
+        MODEL1_DATA,
+        columns["demand"],
     )
 
 
@@ -1073,6 +1076,31 @@ def health():
             LATEST_INSPECTION is not None
         ),
 
+    }
+
+
+@app.get("/data/headers")
+def data_headers():
+    return {
+        "status": "success",
+        "datasets": {
+            "model1": {
+                "headers": export_headers(MODEL1_DATA),
+                "resolved_fields": resolve_production_columns(
+                    MODEL1_DATA
+                ),
+            },
+            "model2": {
+                "headers": export_headers(MODEL2_DATA),
+                "station_fields": discover_station_columns(
+                    MODEL2_DATA
+                ),
+            },
+        },
+        "note": (
+            "Headers are discovered from the first CSV row. "
+            "Known aliases are mapped to the canonical analytics fields."
+        ),
     }
 
 

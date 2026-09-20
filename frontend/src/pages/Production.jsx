@@ -6,12 +6,12 @@ function Production() {
 
   if (loading) {
     return (
-      <main className="page-content">
-        <section className="welcome-section">
+      <main className="page-container">
+        <section className="page-header">
           <span className="header-label">
             PRODUCTION ANALYTICS
           </span>
-          <h2>Loading production data...</h2>
+          <h1>Loading production data...</h1>
           <p>Analyzing manufacturing process data.</p>
         </section>
       </main>
@@ -20,12 +20,12 @@ function Production() {
 
   if (error) {
     return (
-      <main className="page-content">
-        <section className="welcome-section">
+      <main className="page-container">
+        <section className="page-header">
           <span className="header-label">
             SYSTEM ERROR
           </span>
-          <h2>Unable to load production data</h2>
+          <h1>Unable to load production data</h1>
           <p>{error}</p>
 
           <button
@@ -58,14 +58,14 @@ function Production() {
     `${(Number(value ?? 0) * 100).toFixed(1)}%`;
 
   return (
-    <main className="page-content">
-      <section className="welcome-section">
+    <main className="page-container">
+      <section className="page-header">
         <div>
           <span className="header-label">
             PRODUCTION ANALYTICS
           </span>
 
-          <h2>Manufacturing Process</h2>
+          <h1>Manufacturing Process</h1>
 
           <p>
             Monitor queue pressure, utilization,

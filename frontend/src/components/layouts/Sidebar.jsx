@@ -79,15 +79,6 @@ function Sidebar() {
           )
         )}
       </nav>
-
-      <div className="sidebar-status">
-        <span className="status-dot online" />
-
-        <div>
-          <strong>System Online</strong>
-          <small>AI services connected</small>
-        </div>
-      </div>
     </aside>
   );
 }

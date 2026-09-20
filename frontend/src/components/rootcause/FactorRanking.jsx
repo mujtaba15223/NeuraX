@@ -60,8 +60,8 @@ function FactorRanking({ factors }) {
               style={{
                 padding: "14px",
                 borderRadius: "10px",
-                background: "#0b1118",
-                border: "1px solid #263442",
+                background: "var(--card-dark)",
+                border: "1px solid var(--border)",
               }}
             >
               <div
@@ -97,7 +97,7 @@ function FactorRanking({ factors }) {
                   height: "7px",
                   marginTop: "12px",
                   borderRadius: "999px",
-                  background: "#18222d",
+                  background: "var(--bg-tertiary)",
                   overflow: "hidden",
                 }}
               >
@@ -109,7 +109,7 @@ function FactorRanking({ factors }) {
                     )}%`,
                     height: "100%",
                     borderRadius: "999px",
-                    background: "#4db3ff",
+                    background: "var(--accent)",
                   }}
                 />
               </div>

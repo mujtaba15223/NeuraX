@@ -184,10 +184,6 @@ function Inspection() {
                 : "status-dot offline"
             }
           />
-
-          {backendReady
-            ? "AI Backend Online"
-            : "AI Backend Offline"}
         </div>
       </div>
 
