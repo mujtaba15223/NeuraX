@@ -81,10 +81,7 @@ function Inspection() {
 
       const formData = new FormData();
 
-      formData.append(
-        "file",
-        selectedFile
-      );
+      formData.append("file", selectedFile);
 
       const response = await fetch(
         `${API_BASE_URL}/inspection`,
@@ -127,23 +124,26 @@ function Inspection() {
   };
 
   const inspectionResult =
-    result?.inspection || result?.vision || result || {};
+    result?.inspection ||
+    result?.vision ||
+    result ||
+    {};
 
   const isDefective = Boolean(
     inspectionResult?.is_defective
   );
 
-  const status =
-    result
-      ? inspectionResult?.status ||
-        (isDefective ? "DEFECTIVE" : "GOOD")
-      : null;
+  const status = result
+    ? inspectionResult?.status ||
+      (isDefective ? "DEFECTIVE" : "GOOD")
+    : null;
 
   const anomalyScore =
     inspectionResult?.anomaly_score ?? 0;
 
+  // Current production threshold from the trained vision pipeline.
   const threshold =
-    inspectionResult?.threshold ?? 0.138;
+    inspectionResult?.threshold ?? 0.341846;
 
   const model =
     inspectionResult?.model ||
@@ -227,8 +227,7 @@ function Inspection() {
 
               <span>
                 {(
-                  selectedFile.size /
-                  1024
+                  selectedFile.size / 1024
                 ).toFixed(1)}{" "}
                 KB
               </span>
@@ -259,9 +258,7 @@ function Inspection() {
       <div className="inspection-grid">
         <ImageViewer
           image={preview}
-          fileName={
-            selectedFile?.name
-          }
+          fileName={selectedFile?.name}
           status={status}
         />
 
