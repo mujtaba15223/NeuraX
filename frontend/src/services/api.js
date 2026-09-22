@@ -107,3 +107,16 @@ export async function runSimulation(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export async function loginEmployee(employeeId, password) {
+  return apiRequest("/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      employee_id: employeeId,
+      password,
+    }),
+  });
+}

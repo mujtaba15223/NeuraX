@@ -1,0 +1,24 @@
+{
+    "model": "ResNet18",
+    "feature_layer": "layer2",
+    "image_size": [
+        224,
+        224
+    ],
+    "normal_training_images": 220,
+    "defect_reference_images": {
+        "bent": 25,
+        "color": 22,
+        "flip": 23,
+        "scratch": 23
+    },
+    "defect_classes": [
+        "bent",
+        "color",
+        "flip",
+        "scratch"
+    ],
+    "threshold": 0.3418460190296173,
+    "dataset": "MVTec AD metal_nut",
+    "classification_method": "prototype-based"
+}

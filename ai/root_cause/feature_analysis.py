@@ -9,12 +9,12 @@ import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-MODEL2_PATH = (
+MANUFACTURING_OEE_PATH = (
     BASE_DIR
     / "data"
     / "raw"
-    / "model2"
-    / "Model_2.csv"
+    / "new"
+    / "manufacturing-oee.csv"
 )
 
 
@@ -47,9 +47,7 @@ def load_process_data():
     Load Model 2 manufacturing process data.
     """
 
-    return pd.read_csv(
-        MODEL2_PATH
-    )
+    return pd.read_csv(MANUFACTURING_OEE_PATH)
 
 
 # ============================================================
@@ -67,17 +65,47 @@ def analyze_process_features():
 
     df = load_process_data()
 
+    if "machine_id" in df.columns:
+        grouped = df.groupby("machine_id", dropna=True)
+        machine_rows = []
+
+        for machine, group in grouped:
+            planned = pd.to_numeric(group["planned_hours"], errors="coerce").sum()
+            actual = pd.to_numeric(group["actual_hours"], errors="coerce").sum()
+            downtime = max(0.0, float(planned - actual))
+            availability = float(pd.to_numeric(group["availability_pct"], errors="coerce").mean())
+            machine_rows.append((str(machine), downtime, availability))
+
+        max_downtime = max((row[1] for row in machine_rows), default=0.0)
+        max_loss = max((1.0 - row[2] for row in machine_rows), default=0.0)
+        results = []
+
+        for station, downtime, availability in machine_rows:
+            queue_pressure = downtime / max_downtime if max_downtime else 0.0
+            utilization_pressure = (1.0 - availability) / max_loss if max_loss else 0.0
+            combined_pressure = 0.60 * queue_pressure + 0.40 * utilization_pressure
+            results.append({
+                "station": station,
+                "queue_time": round(downtime, 4),
+                "utilization": round(availability, 4),
+                "queue_pressure": round(queue_pressure, 4),
+                "utilization_pressure": round(utilization_pressure, 4),
+                "combined_pressure": round(combined_pressure, 4),
+                "metric_basis": "OEE machine records; queue_time represents downtime_hours",
+            })
+
+        results.sort(key=lambda item: item["combined_pressure"], reverse=True)
+        for rank, result in enumerate(results, start=1):
+            result["rank"] = rank
+        return results
+
     average_queue = {
-        station: float(
-            df[features["queue"]].mean()
-        )
+        station: float(df[features["queue"]].mean())
         for station, features in STATIONS.items()
     }
 
     average_utilization = {
-        station: float(
-            df[features["utilization"]].mean()
-        )
+        station: float(df[features["utilization"]].mean())
         for station, features in STATIONS.items()
     }
 

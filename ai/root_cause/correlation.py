@@ -9,12 +9,12 @@ import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
-MODEL2_PATH = (
+MANUFACTURING_OEE_PATH = (
     BASE_DIR
     / "data"
     / "raw"
-    / "model2"
-    / "Model_2.csv"
+    / "new"
+    / "manufacturing-oee.csv"
 )
 
 
@@ -45,7 +45,7 @@ PROCESS_VARIABLES = {
 def load_process_data():
 
     return pd.read_csv(
-        MODEL2_PATH
+        MANUFACTURING_OEE_PATH
     )
 
 
@@ -56,6 +56,33 @@ def load_process_data():
 def calculate_process_correlations():
 
     df = load_process_data()
+
+    if "machine_id" in df.columns:
+        numeric_columns = [
+            column
+            for column in (
+                "availability_pct",
+                "performance_pct",
+                "quality_pct",
+                "oee_pct",
+                "units_produced",
+                "defects",
+            )
+            if column in df.columns
+        ]
+        correlations = df[numeric_columns].corr().fillna(0.0)
+        return [
+            {
+                "station": "OEE manufacturing signals",
+                "queue_correlations": {},
+                "utilization_correlations": {
+                    column: round(float(correlations.loc["oee_pct", column]), 4)
+                    for column in numeric_columns
+                    if "oee_pct" in correlations.index
+                },
+                "evidence_type": "OEE signal correlation",
+            }
+        ]
 
     correlation_results = []
 
@@ -141,6 +168,20 @@ def calculate_defect_process_association(
     """
 
     df = load_process_data()
+
+    if "machine_id" in df.columns:
+        return [
+            {
+                "defect": defect_type,
+                "station": "OEE manufacturing signals",
+                "queue_mean": round(float((df["planned_hours"] - df["actual_hours"]).mean()), 4),
+                "utilization_mean": round(float(df["availability_pct"].mean()), 4),
+                "queue_std": round(float((df["planned_hours"] - df["actual_hours"]).std()), 4),
+                "utilization_std": round(float(df["availability_pct"].std()), 4),
+                "evidence_type": "process_pressure",
+                "interpretation": "OEE process signals requiring investigation alongside visual defect evidence.",
+            }
+        ]
 
     results = []
 

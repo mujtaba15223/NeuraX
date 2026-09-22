@@ -1,11 +1,12 @@
 from pathlib import Path
 from typing import Optional
+import os
 import shutil
 import tempfile
 
 import pandas as pd
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -21,6 +22,10 @@ from backend.services.manufacturing_data import (
     numeric_sum,
     resolve_production_columns,
 )
+
+from simulation.production_simulation import ProductionParameters
+from simulation.what_if import WhatIfSimulator
+from simulation.scenarios import Scenario, list_scenarios
 
 
 # ============================================================
@@ -48,7 +53,7 @@ app.add_middleware(
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-MODEL1_PATH = (
+MODEL1_DATA_PATH = (
     BASE_DIR
     / "data"
     / "raw"
@@ -56,12 +61,20 @@ MODEL1_PATH = (
     / "Model_1.csv"
 )
 
-MODEL2_PATH = (
+MODEL2_DATA_PATH = (
     BASE_DIR
     / "data"
     / "raw"
     / "model2"
     / "Model_2.csv"
+)
+
+QUALITY_DATA_PATH = (
+    BASE_DIR
+    / "data"
+    / "raw"
+    / "new"
+    / "product-quality-control.csv"
 )
 
 
@@ -92,12 +105,19 @@ def load_csv(path):
 
 
 MODEL1_DATA = load_csv(
-    MODEL1_PATH
+    MODEL1_DATA_PATH
 )
 
 MODEL2_DATA = load_csv(
-    MODEL2_PATH
+    MODEL2_DATA_PATH
 )
+
+QUALITY_DATA = load_csv(
+    QUALITY_DATA_PATH
+)
+
+# Compatibility alias for existing service code and response contracts.
+MANUFACTURING_DATA = MODEL1_DATA
 
 
 # ============================================================
@@ -198,6 +218,20 @@ def calculate_process_analysis():
     if MODEL2_DATA.empty:
         return []
 
+
+    production_columns = resolve_production_columns(
+        MODEL2_DATA
+    )
+
+    machine_column = production_columns.get(
+        "machine_id"
+    )
+
+    if machine_column:
+        return calculate_oee_process_analysis(
+            MODEL2_DATA,
+            production_columns,
+        )
 
     station_columns = discover_station_columns(
         MODEL2_DATA
@@ -324,6 +358,10 @@ def calculate_process_analysis():
                 4,
             ),
 
+            # Compatibility aliases used by existing frontend pages.
+            "avg_queue": round(values["queue_time"], 4),
+            "score": round(combined_pressure, 4),
+
         })
 
 
@@ -348,6 +386,99 @@ def calculate_process_analysis():
 
 
     return results
+
+
+def calculate_oee_process_analysis(
+    dataframe,
+    columns,
+):
+    machine_column = columns.get("machine_id")
+    planned_column = columns.get("planned_hours")
+    actual_column = columns.get("actual_hours")
+    availability_column = columns.get("availability")
+    performance_column = columns.get("performance")
+    quality_column = columns.get("quality")
+    oee_column = columns.get("oee")
+    units_column = columns.get("total_parts")
+    defects_column = columns.get("defects")
+
+    required = {
+        "machine_id": machine_column,
+        "planned_hours": planned_column,
+        "actual_hours": actual_column,
+        "availability": availability_column,
+        "performance": performance_column,
+        "quality": quality_column,
+        "oee": oee_column,
+        "units_produced": units_column,
+        "defects": defects_column,
+    }
+
+    if any(value is None for value in required.values()):
+        return []
+
+    grouped = dataframe.groupby(machine_column, dropna=True)
+    rows = []
+
+    for machine, group in grouped:
+        planned_hours = numeric_sum(group, planned_column)
+        actual_hours = numeric_sum(group, actual_column)
+        downtime_hours = max(0.0, planned_hours - actual_hours)
+        units = numeric_sum(group, units_column)
+        defects = numeric_sum(group, defects_column)
+
+        rows.append({
+            "station": str(machine),
+            "queue_time": round(downtime_hours, 4),
+            "downtime_hours": round(downtime_hours, 4),
+            "utilization": round(numeric_mean(group, availability_column), 4),
+            "availability": round(numeric_mean(group, availability_column), 4),
+            "performance": round(numeric_mean(group, performance_column), 4),
+            "quality": round(numeric_mean(group, quality_column), 4),
+            "oee": round(numeric_mean(group, oee_column), 4),
+            "units_produced": round(units, 2),
+            "defects": round(defects, 2),
+            "defect_rate": round(defects / units, 6) if units else None,
+            "throughput": round(units / actual_hours, 2) if actual_hours else None,
+            "metric_basis": "OEE machine records; queue_time compatibility field represents downtime_hours",
+        })
+
+    max_downtime = max((row["downtime_hours"] for row in rows), default=0.0)
+    max_availability_loss = max(
+        (1.0 - row["availability"] for row in rows),
+        default=0.0,
+    )
+
+    for row in rows:
+        row["queue_pressure"] = round(
+            row["downtime_hours"] / max_downtime
+            if max_downtime else 0.0,
+            4,
+        )
+        availability_loss = 1.0 - row["availability"]
+        row["utilization_pressure"] = round(
+            availability_loss / max_availability_loss
+            if max_availability_loss else 0.0,
+            4,
+        )
+        score = (
+            0.60 * row["queue_pressure"]
+            + 0.40 * row["utilization_pressure"]
+        )
+        row["pressure_score"] = round(score, 4)
+        row["base_pressure_score"] = round(score, 4)
+        row["avg_queue"] = row["queue_time"]
+        row["score"] = row["pressure_score"]
+
+    rows.sort(
+        key=lambda item: item["pressure_score"],
+        reverse=True,
+    )
+
+    for index, row in enumerate(rows, start=1):
+        row["rank"] = index
+
+    return rows
 
 
 # ============================================================
@@ -644,8 +775,82 @@ def get_inspection_process_context():
 
 def calculate_production_summary():
 
-    if MODEL1_DATA.empty:
+    if MODEL1_DATA.empty and QUALITY_DATA.empty:
+        return {
+            "status": "unavailable",
+            "message": "No manufacturing or quality-control data is available.",
+        }
 
+    quality_columns = resolve_production_columns(
+        QUALITY_DATA
+    )
+
+    if not QUALITY_DATA.empty and quality_columns.get(
+        "units_inspected"
+    ):
+        inspected = numeric_sum(
+            QUALITY_DATA,
+            quality_columns["units_inspected"],
+        )
+        passed = (
+            numeric_sum(
+                QUALITY_DATA,
+                quality_columns["units_passed"],
+            )
+            if quality_columns.get("units_passed")
+            else None
+        )
+        defects = (
+            numeric_sum(
+                QUALITY_DATA,
+                quality_columns["defect_count"],
+            )
+            if quality_columns.get("defect_count")
+            else None
+        )
+
+        defect_breakdown = {}
+        defect_type_column = quality_columns.get("defect_type")
+        if defect_type_column:
+            defect_rows = QUALITY_DATA.copy()
+            defect_rows[defect_type_column] = (
+                defect_rows[defect_type_column]
+                .fillna("Unknown")
+                .replace("", "Unknown")
+            )
+            defect_breakdown = {
+                str(label): int(count)
+                for label, count in defect_rows[
+                    defect_type_column
+                ].value_counts().items()
+                if str(label).lower() not in {"none", "unknown"}
+            }
+
+        return {
+            "status": "success",
+            "data_source": "product-quality-control.csv",
+            "total_parts": round(inspected, 2),
+            "units_inspected": round(inspected, 2),
+            "units_passed": round(passed, 2) if passed is not None else None,
+            "average_units_per_batch": round(
+                inspected / len(QUALITY_DATA),
+                2,
+            ) if len(QUALITY_DATA) else None,
+            "average_parts_per_hour": None,
+            "average_demand": None,
+            "total_defects": round(defects, 2) if defects is not None else None,
+            "defect_breakdown": defect_breakdown,
+            "measured_defect_rate": round(
+                defects / inspected,
+                6,
+            ) if defects is not None and inspected else None,
+            "quality_batches": int(len(QUALITY_DATA)),
+            "demand_available": False,
+            "message": (
+                "Production volume and quality metrics use the quality-control dataset. "
+                "Hourly throughput and demand are not present in that file."
+            ),
+        }
         return {
 
             "status": "unavailable"
@@ -656,6 +861,39 @@ def calculate_production_summary():
     columns = resolve_production_columns(
         MODEL1_DATA
     )
+
+    if columns.get("machine_id"):
+        total_parts = numeric_sum(
+            MODEL1_DATA,
+            columns["total_parts"],
+        )
+        actual_hours = numeric_sum(
+            MODEL1_DATA,
+            columns["actual_hours"],
+        )
+        defects = numeric_sum(
+            MODEL1_DATA,
+            columns["defects"],
+        )
+
+        return {
+            "status": "success",
+            "data_source": "manufacturing-oee.csv",
+            "total_parts": round(total_parts, 2),
+            "average_parts_per_hour": round(
+                total_parts / actual_hours,
+                2,
+            ) if actual_hours else None,
+            "average_demand": None,
+            "total_defects": round(defects, 2),
+            "measured_defect_rate": round(
+                defects / total_parts,
+                6,
+            ) if total_parts else None,
+            "actual_hours": round(actual_hours, 2),
+            "demand_available": False,
+            "message": "Demand is not available in the OEE dataset.",
+        }
 
     missing = [
         field
@@ -704,9 +942,10 @@ def calculate_production_summary():
             2,
         ),
 
-        "average_parts_per_hour": round(
-            average_parts_per_hour,
-            2,
+        "average_parts_per_hour": (
+            round(average_parts_per_hour, 2)
+            if average_parts_per_hour is not None
+            else None
         ),
 
         "average_demand": round(
@@ -745,8 +984,37 @@ def calculate_production_impact():
     ]
 
 
-    # Demo assumptions.
-    defect_rate = 0.05
+    columns = resolve_production_columns(
+        QUALITY_DATA
+    )
+
+    measured_defect_rate = None
+    if (
+        not QUALITY_DATA.empty
+        and columns.get("defect_count")
+        and columns.get("units_inspected")
+    ):
+        total_units = numeric_sum(
+            QUALITY_DATA,
+            columns["units_inspected"],
+        )
+        total_defects = numeric_sum(
+            QUALITY_DATA,
+            columns["defect_count"],
+        )
+        measured_defect_rate = (
+            total_defects / total_units
+            if total_units
+            else None
+        )
+
+    # Use the measured OEE defect rate when available; otherwise retain
+    # the configurable demo assumption for legacy datasets.
+    defect_rate = (
+        measured_defect_rate
+        if measured_defect_rate is not None
+        else 0.05
+    )
 
     scrap_cost_per_part = 250
 
@@ -801,7 +1069,10 @@ def calculate_production_impact():
 
 
     downtime_hours = (
-        queue_time / 60.0
+        queue_time
+        if bottleneck
+        and bottleneck.get("metric_basis", "").startswith("OEE")
+        else queue_time / 60.0
     )
 
 
@@ -829,14 +1100,17 @@ def calculate_production_impact():
             2,
         ),
 
-        "average_parts_per_hour": round(
-            average_parts_per_hour,
-            2,
+        "average_parts_per_hour": (
+            round(average_parts_per_hour, 2)
+            if average_parts_per_hour is not None
+            else None
         ),
 
         "assumed_defect_rate": (
             defect_rate
         ),
+
+        "measured_defect_rate": measured_defect_rate,
 
         "estimated_defective_parts": round(
             estimated_defective_parts,
@@ -859,6 +1133,11 @@ def calculate_production_impact():
         ),
 
         "estimated_total_impact": round(
+            total_impact,
+            2,
+        ),
+
+        "total_estimated_impact": round(
             total_impact,
             2,
         ),
@@ -900,129 +1179,231 @@ def calculate_production_impact():
 # SIMULATION
 # ============================================================
 
-class SimulationRequest(BaseModel):
 
-    throughput_change_percent: float = 0.0
-
-    defect_reduction_percent: float = 0.0
-
-    downtime_reduction_percent: float = 0.0
+class LoginRequest(BaseModel):
+    employee_id: str
+    password: str
 
 
-def run_simulation(
-    payload: SimulationRequest
-):
+@app.post("/login")
+def login(payload: LoginRequest):
+    """Backend authentication for the employee login."""
+    expected_employee_id = os.getenv("INDUSTRIAL_EMPLOYEE_ID", "EMP001")
+    expected_password = os.getenv("INDUSTRIAL_EMPLOYEE_PASSWORD", "Industrial@123")
 
-    production = (
-        calculate_production_summary()
-    )
+    employee_id = payload.employee_id.strip()
 
-
-    if production.get(
-        "status"
-    ) != "success":
-
-        return production
-
-
-    base_throughput = production[
-        "average_parts_per_hour"
-    ]
-
-
-    base_defect_rate = 5.0
-
-
-    simulated_throughput = (
-        base_throughput
-        *
-        (
-            1
-            +
-            payload.throughput_change_percent
-            / 100
-        )
-    )
-
-
-    simulated_defect_rate = (
-        base_defect_rate
-        *
-        (
-            1
-            -
-            payload.defect_reduction_percent
-            / 100
-        )
-    )
-
-
-    simulated_downtime = (
-        100
-        *
-        (
-            1
-            -
-            payload.downtime_reduction_percent
-            / 100
-        )
-    )
-
+    if employee_id != expected_employee_id or payload.password != expected_password:
+        raise HTTPException(status_code=401, detail="Invalid Employee ID or Password.")
 
     return {
+        "status": "success",
+        "message": "Login successful.",
+        "employee_id": employee_id,
+    }
 
+
+class SimulationRequest(BaseModel):
+    # Existing frontend-compatible controls.
+    throughput_change_percent: float = 0.0
+    defect_reduction_percent: float = 0.0
+    downtime_reduction_percent: float = 0.0
+
+    # New scenario-based simulation.
+    scenario: Optional[str] = None
+    scenario_name: Optional[str] = None
+
+    # Optional direct controls.
+    queue_reduction_percent: float = 0.0
+    utilization_change_percent: float = 0.0
+
+
+def get_simulation_parameters():
+    """Build simulation inputs from the real project datasets."""
+
+    production = calculate_production_summary()
+    process = calculate_process_analysis()
+
+    defect_rate = production.get("measured_defect_rate")
+    if defect_rate is None:
+        defect_rate = 0.05
+
+    model1_columns = resolve_production_columns(MODEL1_DATA)
+
+    total_parts = production.get("total_parts") or 0.0
+    parts_per_hour = None
+
+    if model1_columns.get("parts_per_hour"):
+        parts_per_hour = numeric_mean(
+            MODEL1_DATA,
+            model1_columns["parts_per_hour"],
+        )
+
+    if not parts_per_hour:
+        parts_per_hour = production.get("average_parts_per_hour") or 0.0
+
+    top_process = process[0] if process else None
+
+    queue_time = (
+        safe_float(top_process.get("queue_time"))
+        if top_process
+        else 0.0
+    )
+
+    utilization = (
+        safe_float(top_process.get("utilization"))
+        if top_process
+        else 0.0
+    )
+
+    downtime_hours = 0.0
+
+    if top_process and top_process.get("metric_basis", "").startswith("OEE"):
+        downtime_hours = queue_time
+
+    return ProductionParameters(
+        total_parts=float(total_parts),
+        parts_per_hour=float(parts_per_hour),
+        defect_rate=float(defect_rate),
+        queue_time=float(queue_time),
+        utilization=float(utilization),
+        downtime_hours=float(downtime_hours),
+        scrap_cost_per_part=250.0,
+        rework_cost_per_part=100.0,
+        downtime_cost_per_hour=1500.0,
+    )
+
+
+def run_simulation(payload: SimulationRequest):
+    """Run the real Python what-if simulation engine."""
+
+    parameters = get_simulation_parameters()
+
+    simulator = WhatIfSimulator(
+        scrap_cost_per_part=parameters.scrap_cost_per_part,
+        rework_cost_per_part=parameters.rework_cost_per_part,
+        downtime_cost_per_hour=parameters.downtime_cost_per_hour,
+    )
+
+    requested_scenario = payload.scenario_name or payload.scenario
+
+    # ------------------------------------------------------------
+    # Predefined scenario mode
+    # ------------------------------------------------------------
+    if requested_scenario:
+        try:
+            result = simulator.compare(
+                parameters,
+                requested_scenario,
+            )
+
+            result["input"] = {
+                "mode": "scenario",
+                "scenario": requested_scenario,
+            }
+
+            return result
+
+        except ValueError as error:
+            return {
+                "status": "simulation_failed",
+                "message": str(error),
+                "available_scenarios": [
+                    item["id"] for item in list_scenarios()
+                ],
+            }
+
+    # ------------------------------------------------------------
+    # Existing frontend control mode
+    # ------------------------------------------------------------
+    custom_scenario = Scenario(
+        name="Custom What-If",
+        description="User-configured production what-if scenario.",
+        throughput_change_percent=payload.throughput_change_percent,
+        defect_rate_change_percent=-payload.defect_reduction_percent,
+        utilization_change_percent=payload.utilization_change_percent,
+        queue_change_percent=-payload.queue_reduction_percent,
+        downtime_change_percent=-payload.downtime_reduction_percent,
+    )
+
+    baseline = simulator._run_baseline(parameters)
+    simulated = simulator._run_scenario(
+        parameters,
+        custom_scenario,
+    )
+
+    difference = WhatIfSimulator._difference
+
+    comparison = {
+        "defective_parts": difference(
+            baseline["defective_parts"],
+            simulated["defective_parts"],
+        ),
+        "good_parts": difference(
+            baseline["good_parts"],
+            simulated["good_parts"],
+        ),
+        "effective_throughput": difference(
+            baseline["effective_throughput"],
+            simulated["effective_throughput"],
+        ),
+        "defect_rate": difference(
+            baseline["defect_rate"],
+            simulated["defect_rate"],
+        ),
+        "queue_time": difference(
+            baseline["queue_time"],
+            simulated["queue_time"],
+        ),
+        "utilization": difference(
+            baseline["utilization"],
+            simulated["utilization"],
+        ),
+        "downtime_hours": difference(
+            baseline["downtime_hours"],
+            simulated["downtime_hours"],
+        ),
+        "economic_impact": difference(
+            baseline["estimated_economic_impact"],
+            simulated["estimated_economic_impact"],
+        ),
+    }
+
+    return {
         "status": "simulation_complete",
-
-        "baseline": {
-
-            "throughput": round(
-                base_throughput,
-                2,
-            ),
-
-            "defect_rate_percent": (
-                base_defect_rate
-            ),
-
-            "downtime_index": 100,
-
-        },
-
         "scenario": {
-
-            "throughput": round(
-                simulated_throughput,
-                2,
-            ),
-
-            "defect_rate_percent": round(
-                simulated_defect_rate,
-                2,
-            ),
-
-            "downtime_index": round(
-                simulated_downtime,
-                2,
-            ),
-
+            "id": "custom",
+            "name": custom_scenario.name,
+            "description": custom_scenario.description,
         },
-
+        "baseline": baseline,
+        "simulated": simulated,
+        "scenario_result": simulated,
+        "comparison": comparison,
         "changes": {
-
-            "throughput_change_percent": (
-                payload.throughput_change_percent
-            ),
-
-            "defect_reduction_percent": (
-                payload.defect_reduction_percent
-            ),
-
-            "downtime_reduction_percent": (
-                payload.downtime_reduction_percent
-            ),
-
+            "throughput_change_percent": payload.throughput_change_percent,
+            "defect_reduction_percent": payload.defect_reduction_percent,
+            "downtime_reduction_percent": payload.downtime_reduction_percent,
+            "queue_reduction_percent": payload.queue_reduction_percent,
+            "utilization_change_percent": payload.utilization_change_percent,
         },
+        "input": {
+            "mode": "custom",
+        },
+        "decision_support_note": (
+            "Simulation results are estimated outcomes based on "
+            "configurable assumptions. They should be validated "
+            "against real production trials before operational decisions."
+        ),
+    }
 
+
+def simulation_scenarios():
+    """Return predefined scenarios available to the frontend."""
+
+    return {
+        "status": "success",
+        "scenarios": list_scenarios(),
     }
 
 
@@ -1072,6 +1453,10 @@ def health():
             not MODEL2_DATA.empty
         ),
 
+        "quality_data_loaded": (
+            not QUALITY_DATA.empty
+        ),
+
         "latest_inspection": (
             LATEST_INSPECTION is not None
         ),
@@ -1083,6 +1468,7 @@ def health():
 def data_headers():
     return {
         "status": "success",
+        "data_source": "product-quality-control.csv",
         "datasets": {
             "model1": {
                 "headers": export_headers(MODEL1_DATA),
@@ -1094,6 +1480,18 @@ def data_headers():
                 "headers": export_headers(MODEL2_DATA),
                 "station_fields": discover_station_columns(
                     MODEL2_DATA
+                ),
+            },
+            "manufacturing_oee": {
+                "headers": export_headers(MANUFACTURING_DATA),
+                "resolved_fields": resolve_production_columns(
+                    MANUFACTURING_DATA
+                ),
+            },
+            "quality_control": {
+                "headers": export_headers(QUALITY_DATA),
+                "resolved_fields": resolve_production_columns(
+                    QUALITY_DATA
                 ),
             },
         },
@@ -1292,6 +1690,12 @@ def root_cause():
 # ============================================================
 # SIMULATION
 # ============================================================
+
+@app.get("/simulation/scenarios")
+def simulation_scenarios_endpoint():
+
+    return simulation_scenarios()
+
 
 @app.post("/simulation")
 def simulation(

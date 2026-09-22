@@ -13,12 +13,14 @@ FIELD_ALIASES = {
         "parts produced",
         "production volume",
         "output",
+        "units produced",
     ),
     "parts_per_hour": (
         "parts per hour",
         "parts/hour",
         "throughput",
         "hourly throughput",
+        "units per hour",
     ),
     "demand": (
         "demand",
@@ -30,6 +32,20 @@ FIELD_ALIASES = {
         "value added time",
         "value added",
     ),
+    "planned_hours": ("planned hours", "planned time"),
+    "actual_hours": ("actual hours", "run hours", "operating hours"),
+    "availability": ("availability pct", "availability"),
+    "performance": ("performance pct", "performance"),
+    "quality": ("quality pct", "quality"),
+    "oee": ("oee pct", "oee"),
+    "defects": ("defects", "defective units", "defect count"),
+    "machine_id": ("machine id", "machine", "asset id"),
+    "units_inspected": ("units inspected", "inspected units"),
+    "units_passed": ("units passed", "passed units", "good units"),
+    "defect_count": ("defect count", "defects", "defective units"),
+    "defect_type": ("defect type", "defect category"),
+    "qc_result": ("qc result", "quality result", "inspection result"),
+    "line_id": ("line id", "production line", "line"),
 }
 
 

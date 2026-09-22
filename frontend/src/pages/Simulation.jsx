@@ -19,16 +19,24 @@ function Simulation() {
       setLoading(true);
       setError("");
 
-      const response = await fetch(`${API_BASE_URL}/analysis`);
+      const response = await fetch(
+        `${API_BASE_URL}/analysis`
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to load production analysis");
+        throw new Error(
+          "Failed to load production analysis"
+        );
       }
 
       const data = await response.json();
+
       setAnalysis(data);
     } catch (err) {
-      setError(err.message || "Unable to connect to backend");
+      setError(
+        err.message ||
+          "Unable to connect to backend"
+      );
     } finally {
       setLoading(false);
     }
@@ -38,140 +46,254 @@ function Simulation() {
     fetchAnalysis();
   }, []);
 
-  const runSimulation = async ({ station, scenario, improvement }) => {
+  const runSimulation = async ({
+    station,
+    scenario,
+    improvement,
+  }) => {
     if (!analysis) {
       return;
     }
 
     setRunning(true);
     setError("");
+    setResult(null);
 
-    await new Promise((resolve) => {
-      setTimeout(resolve, 350);
-    });
+    try {
+      /*
+       * The ScenarioControls component uses human-readable
+       * scenario names. Convert them to the scenario IDs
+       * understood by the Python simulation engine.
+       */
 
-    const processAnalysis = Array.isArray(analysis?.process?.analysis)
-      ? analysis.process.analysis
-      : Array.isArray(analysis?.process?.process_analysis)
-        ? analysis.process.process_analysis
-        : Array.isArray(analysis?.process_analysis)
-          ? analysis.process_analysis
-          : [];
+      const scenarioMap = {
+        "Reduce Queue Time": "reduce_queue",
+        "Increase Capacity": "increase_capacity",
+        "Reduce Utilization": "reduce_queue",
+        "Reduce Cycle Time": "increase_capacity",
+        "Reduce Defects": "reduce_defects",
+        "Process Optimization":
+          "process_optimization",
+        "Preventive Maintenance":
+          "maintenance",
+        "Quality + Flow Improvement":
+          "quality_and_flow",
+      };
 
-    const stationData =
-      processAnalysis.find((item) => item.station === station) || {};
+      const scenarioId =
+        scenarioMap[scenario] ||
+        "process_optimization";
 
-    const baselineQueue =
-      Number(stationData.avg_queue ?? stationData.queue_time ?? 0);
+      /*
+       * Send the scenario to the real backend.
+       */
 
-    const baselineUtilization =
-      Number(stationData.utilization ?? stationData.avg_utilization ?? 0);
+      const response = await fetch(
+        `${API_BASE_URL}/simulation`,
+        {
+          method: "POST",
 
-    const baselineThroughput =
-      Number(
-        analysis?.production_impact?.average_parts_per_hour ??
-          analysis?.production?.average_parts_per_hour ??
-          0
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            mode: "scenario",
+            scenario: scenarioId,
+          }),
+        }
       );
 
-    const improvementFactor =
-      Number(improvement) / 100;
+      if (!response.ok) {
+        let message =
+          "Simulation request failed";
 
-    let projectedQueue = baselineQueue;
-    let projectedUtilization = baselineUtilization;
-    let projectedThroughput = baselineThroughput;
+        try {
+          const errorData =
+            await response.json();
 
-    if (scenario === "Reduce Queue Time") {
-      projectedQueue =
-        baselineQueue * (1 - improvementFactor);
+          message =
+            errorData?.detail ||
+            errorData?.message ||
+            message;
+        } catch {
+          // Keep default message.
+        }
 
-      projectedThroughput =
-        baselineThroughput *
-        (1 + improvementFactor * 0.25);
-    }
+        throw new Error(message);
+      }
 
-    if (scenario === "Increase Capacity") {
-      projectedUtilization =
-        baselineUtilization *
-        (1 - improvementFactor * 0.5);
+      const data = await response.json();
 
-      projectedThroughput =
-        baselineThroughput *
-        (1 + improvementFactor * 0.5);
-    }
+      /*
+       * Backend returns:
+       *
+       * baseline
+       * simulated
+       * comparison
+       * interpretation
+       */
 
-    if (scenario === "Reduce Utilization") {
-      projectedUtilization =
-        baselineUtilization *
-        (1 - improvementFactor);
+      if (
+        data.status !== "success" &&
+        data.status !== "simulation_complete"
+      ) {
+        throw new Error(
+          data.message ||
+            "Simulation could not be completed"
+        );
+      }
 
-      projectedThroughput =
-        baselineThroughput *
-        (1 + improvementFactor * 0.2);
-    }
+      const baseline =
+        data.baseline || {};
 
-    if (scenario === "Reduce Cycle Time") {
-      projectedThroughput =
-        baselineThroughput *
-        (1 + improvementFactor * 0.4);
+      const simulated =
+        data.simulated ||
+        data.scenario ||
+        {};
 
-      projectedQueue =
-        baselineQueue *
-        (1 - improvementFactor * 0.3);
-    }
+      /*
+       * Normalize the backend response into the
+       * structure expected by the existing UI components.
+       */
 
-    const baselineImpact =
-      Number(
-        analysis?.economics?.total_estimated_impact ??
-          analysis?.production_impact?.total_estimated_impact ??
-          0
+      const normalizedResult = {
+        station,
+
+        scenario:
+          data.scenario?.name ||
+          scenario,
+
+        scenarioId:
+          data.scenario?.id ||
+          scenarioId,
+
+        improvement:
+          Number(improvement) || 0,
+
+        before: {
+          queue:
+            Number(
+              baseline.queue_time
+            ) || 0,
+
+          utilization:
+            Number(
+              baseline.utilization
+            ) || 0,
+
+          throughput:
+            Number(
+              baseline.effective_throughput ??
+                baseline.parts_per_hour
+            ) || 0,
+        },
+
+        after: {
+          queue:
+            Number(
+              simulated.queue_time
+            ) || 0,
+
+          utilization:
+            Number(
+              simulated.utilization
+            ) || 0,
+
+          throughput:
+            Number(
+              simulated.effective_throughput ??
+                simulated.parts_per_hour
+            ) || 0,
+        },
+
+        baseline: {
+          throughput:
+            Number(
+              baseline.effective_throughput ??
+                baseline.parts_per_hour
+            ) || 0,
+
+          queue:
+            Number(
+              baseline.queue_time
+            ) || 0,
+
+          impact:
+            Number(
+              baseline.estimated_economic_impact
+            ) || 0,
+
+          defectRate:
+            Number(
+              baseline.defect_rate
+            ) || 0,
+
+          defectiveParts:
+            Number(
+              baseline.defective_parts
+            ) || 0,
+        },
+
+        simulated: {
+          throughput:
+            Number(
+              simulated.effective_throughput ??
+                simulated.parts_per_hour
+            ) || 0,
+
+          queue:
+            Number(
+              simulated.queue_time
+            ) || 0,
+
+          impact:
+            Number(
+              simulated.estimated_economic_impact
+            ) || 0,
+
+          defectRate:
+            Number(
+              simulated.defect_rate
+            ) || 0,
+
+          defectiveParts:
+            Number(
+              simulated.defective_parts
+            ) || 0,
+        },
+
+        estimated_savings:
+          Math.max(
+            0,
+            Number(
+              baseline.estimated_economic_impact
+            ) -
+              Number(
+                simulated.estimated_economic_impact
+              )
+          ),
+
+        comparison:
+          data.comparison || null,
+
+        interpretation:
+          data.interpretation || null,
+
+        decisionSupportNote:
+          data.decision_support_note ||
+          "Simulation results are estimates based on configurable assumptions.",
+      };
+
+      setResult(normalizedResult);
+    } catch (err) {
+      setError(
+        err.message ||
+          "Unable to run simulation"
       );
-
-    const throughputGain =
-      projectedThroughput - baselineThroughput;
-
-    const estimatedSavings =
-      Math.max(0, throughputGain) * 250;
-
-    const projectedImpact =
-      Math.max(
-        0,
-        baselineImpact - estimatedSavings
-      );
-
-    setResult({
-      station,
-      scenario,
-      improvement: Number(improvement),
-
-      before: {
-        queue: baselineQueue,
-        utilization: baselineUtilization,
-        throughput: baselineThroughput,
-      },
-
-      after: {
-        queue: projectedQueue,
-        utilization: projectedUtilization,
-        throughput: projectedThroughput,
-      },
-
-      baseline: {
-        throughput: baselineThroughput,
-        queue: baselineQueue,
-        impact: baselineImpact,
-      },
-
-      simulated: {
-        throughput: projectedThroughput,
-        queue: projectedQueue,
-        impact: projectedImpact,
-      },
-
-      estimated_savings: estimatedSavings,
-    });
-
-    setRunning(false);
+    } finally {
+      setRunning(false);
+    }
   };
 
   if (loading) {
@@ -183,11 +305,13 @@ function Simulation() {
               WHAT-IF SIMULATION
             </span>
 
-            <h1>Production Simulation</h1>
+            <h1>
+              Production Simulation
+            </h1>
 
             <p>
-              Test process improvements before applying
-              them to production.
+              Test process improvements before
+              applying them to production.
             </p>
           </div>
         </div>
@@ -217,11 +341,13 @@ function Simulation() {
               WHAT-IF SIMULATION
             </span>
 
-            <h1>Production Simulation</h1>
+            <h1>
+              Production Simulation
+            </h1>
 
             <p>
-              Test process improvements before applying
-              them to production.
+              Test process improvements before
+              applying them to production.
             </p>
           </div>
         </div>
@@ -257,23 +383,36 @@ function Simulation() {
             WHAT-IF SIMULATION
           </span>
 
-          <h1>Production Simulation</h1>
+          <h1>
+            Production Simulation
+          </h1>
 
           <p>
-            Test process improvements and estimate their
-            effect on throughput, queue pressure, and
-            economic impact.
+            Test process improvements and estimate
+            their effect on throughput, queue
+            pressure, quality, and economic impact.
           </p>
         </div>
 
         <button
           className="action-button"
           onClick={fetchAnalysis}
+          disabled={running}
         >
           <RefreshCw size={16} />
           Refresh Model
         </button>
       </div>
+
+      {error && (
+        <div className="dashboard-card">
+          <div className="empty-state">
+            <AlertTriangle size={24} />
+
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-card">
         <div className="card-header">
@@ -302,7 +441,7 @@ function Simulation() {
               size={18}
             />
 
-            Running simulation...
+            Running Python simulation...
           </div>
         )}
       </div>
@@ -322,6 +461,71 @@ function Simulation() {
             baseline={result.baseline}
             simulated={result.simulated}
           />
+
+          <div className="dashboard-card">
+            <div className="card-header">
+              <div>
+                <span className="header-label">
+                  SIMULATION OUTPUT
+                </span>
+
+                <h3>
+                  Decision Support Summary
+                </h3>
+              </div>
+            </div>
+
+            <div className="simulation-summary">
+              <p>
+                <strong>
+                  Scenario:
+                </strong>{" "}
+                {result.scenario}
+              </p>
+
+              <p>
+                <strong>
+                  Estimated defective parts:
+                </strong>{" "}
+                {result.baseline.defectiveParts.toLocaleString()}{" "}
+                →{" "}
+                {result.simulated.defectiveParts.toLocaleString()}
+              </p>
+
+              <p>
+                <strong>
+                  Estimated economic impact:
+                </strong>{" "}
+                ₹
+                {result.baseline.impact.toLocaleString(
+                  "en-IN",
+                  {
+                    maximumFractionDigits: 2,
+                  }
+                )}{" "}
+                → ₹
+                {result.simulated.impact.toLocaleString(
+                  "en-IN",
+                  {
+                    maximumFractionDigits: 2,
+                  }
+                )}
+              </p>
+
+              <p>
+                <strong>
+                  Estimated impact reduction:
+                </strong>{" "}
+                ₹
+                {result.estimated_savings.toLocaleString(
+                  "en-IN",
+                  {
+                    maximumFractionDigits: 2,
+                  }
+                )}
+              </p>
+            </div>
+          </div>
         </>
       )}
 
@@ -336,11 +540,11 @@ function Simulation() {
           </strong>
 
           <p>
-            What-if results are modeled estimates based
-            on configurable improvement assumptions.
-            They should be validated with real production
-            experiments before operational decisions are
-            made.
+            What-if results are modeled estimates
+            based on configurable improvement
+            assumptions. They should be validated
+            with real production experiments before
+            operational decisions are made.
           </p>
         </div>
       </div>

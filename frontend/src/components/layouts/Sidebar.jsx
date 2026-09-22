@@ -6,9 +6,10 @@ import {
   AlertTriangle,
   IndianRupee,
   FlaskConical,
+  LogOut,
 } from "lucide-react";
 
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
 const navigation = [
   {
@@ -49,6 +50,17 @@ const navigation = [
 ];
 
 function Sidebar() {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("industrial_logged_in");
+    sessionStorage.removeItem("industrial_employee_id");
+
+    navigate("/login", { replace: true });
+
+    window.location.reload();
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -79,6 +91,17 @@ function Sidebar() {
           )
         )}
       </nav>
+
+      <div className="sidebar-bottom">
+        <button
+          type="button"
+          className="logout-button"
+          onClick={handleLogout}
+        >
+          <LogOut size={19} />
+          <span>Logout</span>
+        </button>
+      </div>
     </aside>
   );
 }
