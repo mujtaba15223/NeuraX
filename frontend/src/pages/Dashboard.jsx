@@ -492,8 +492,7 @@ function Dashboard() {
                 </tr>
               </thead>
 
-              <tbody>
-
+              <tbody>                                      
                 {processData.map(
                   (station) => {
 

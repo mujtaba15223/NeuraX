@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, Play, AlertTriangle } from "lucide-react";
+import {
+  RefreshCw,
+  Play,
+  AlertTriangle,
+  FlaskConical,
+  TrendingUp,
+  TrendingDown,
+  IndianRupee,
+  Gauge,
+  ShieldCheck,
+} from "lucide-react";
 
 import ScenarioControls from "../components/simulation/ScenarioControls";
 import SimulationResults from "../components/simulation/SimulationResults";
@@ -60,12 +70,6 @@ function Simulation() {
     setResult(null);
 
     try {
-      /*
-       * The ScenarioControls component uses human-readable
-       * scenario names. Convert them to the scenario IDs
-       * understood by the Python simulation engine.
-       */
-
       const scenarioMap = {
         "Reduce Queue Time": "reduce_queue",
         "Increase Capacity": "increase_capacity",
@@ -83,10 +87,6 @@ function Simulation() {
       const scenarioId =
         scenarioMap[scenario] ||
         "process_optimization";
-
-      /*
-       * Send the scenario to the real backend.
-       */
 
       const response = await fetch(
         `${API_BASE_URL}/simulation`,
@@ -125,15 +125,6 @@ function Simulation() {
 
       const data = await response.json();
 
-      /*
-       * Backend returns:
-       *
-       * baseline
-       * simulated
-       * comparison
-       * interpretation
-       */
-
       if (
         data.status !== "success" &&
         data.status !== "simulation_complete"
@@ -151,11 +142,6 @@ function Simulation() {
         data.simulated ||
         data.scenario ||
         {};
-
-      /*
-       * Normalize the backend response into the
-       * structure expected by the existing UI components.
-       */
 
       const normalizedResult = {
         station,
@@ -296,10 +282,40 @@ function Simulation() {
     }
   };
 
+  const formatNumber = (value) =>
+    Number(value ?? 0).toLocaleString(
+      "en-IN",
+      {
+        maximumFractionDigits: 2,
+      }
+    );
+
+  const formatCurrency = (value) =>
+    `₹${Number(value ?? 0).toLocaleString(
+      "en-IN",
+      {
+        maximumFractionDigits: 0,
+      }
+    )}`;
+
+  const calculateChange = (
+    before,
+    after
+  ) => {
+    if (!before) {
+      return 0;
+    }
+
+    return (
+      ((after - before) / before) *
+      100
+    );
+  };
+
   if (loading) {
     return (
-      <div className="page-container">
-        <div className="page-header">
+      <main className="page-container">
+        <section className="page-header">
           <div>
             <span className="header-label">
               WHAT-IF SIMULATION
@@ -310,32 +326,37 @@ function Simulation() {
             </h1>
 
             <p>
-              Test process improvements before
-              applying them to production.
+              Loading the production decision
+              model and simulation engine.
             </p>
           </div>
-        </div>
+        </section>
 
-        <div className="dashboard-card">
+        <section className="dashboard-card">
           <div className="empty-state">
             <RefreshCw
               className="spin"
-              size={28}
+              size={30}
             />
 
-            <p>
+            <h3>
               Loading production model...
+            </h3>
+
+            <p>
+              Preparing the what-if simulation
+              environment.
             </p>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     );
   }
 
   if (error && !analysis) {
     return (
-      <div className="page-container">
-        <div className="page-header">
+      <main className="page-container">
+        <section className="page-header">
           <div>
             <span className="header-label">
               WHAT-IF SIMULATION
@@ -350,9 +371,9 @@ function Simulation() {
               applying them to production.
             </p>
           </div>
-        </div>
+        </section>
 
-        <div className="dashboard-card">
+        <section className="dashboard-card">
           <div className="empty-state">
             <AlertTriangle size={30} />
 
@@ -370,14 +391,16 @@ function Simulation() {
               Retry
             </button>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     );
   }
 
   return (
-    <div className="page-container">
-      <div className="page-header">
+    <main className="page-container">
+
+      {/* HEADER */}
+      <section className="page-header">
         <div>
           <span className="header-label">
             WHAT-IF SIMULATION
@@ -388,9 +411,10 @@ function Simulation() {
           </h1>
 
           <p>
-            Test process improvements and estimate
-            their effect on throughput, queue
-            pressure, quality, and economic impact.
+            Test process improvements and
+            estimate their effect on throughput,
+            quality, queue pressure, and
+            economic impact.
           </p>
         </div>
 
@@ -402,19 +426,134 @@ function Simulation() {
           <RefreshCw size={16} />
           Refresh Model
         </button>
-      </div>
+      </section>
 
-      {error && (
+      {/* MODEL STATUS */}
+      <section className="dashboard-grid">
+
         <div className="dashboard-card">
+          <div className="card-header">
+            <div>
+              <span className="header-label">
+                SIMULATION ENGINE
+              </span>
+
+              <h3>
+                Model Ready
+              </h3>
+            </div>
+
+            <ShieldCheck size={22} />
+          </div>
+
+          <div className="station-score">
+            <span>
+              Backend Status
+            </span>
+
+            <strong>
+              READY
+            </strong>
+          </div>
+
+          <small>
+            Production model loaded and
+            available for what-if analysis.
+          </small>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="card-header">
+            <div>
+              <span className="header-label">
+                DECISION SUPPORT
+              </span>
+
+              <h3>
+                Scenario Testing
+              </h3>
+            </div>
+
+            <FlaskConical size={22} />
+          </div>
+
+          <div className="station-score">
+            <span>
+              Mode
+            </span>
+
+            <strong>
+              WHAT-IF
+            </strong>
+          </div>
+
+          <small>
+            Compare modeled baseline and
+            improved production states.
+          </small>
+        </div>
+
+        <div className="dashboard-card">
+          <div className="card-header">
+            <div>
+              <span className="header-label">
+                OUTPUTS
+              </span>
+
+              <h3>
+                Impact Metrics
+              </h3>
+            </div>
+
+            <Gauge size={22} />
+          </div>
+
+          <div className="metric-row">
+            <span>
+              Throughput
+            </span>
+
+            <strong>
+              ✓
+            </strong>
+          </div>
+
+          <div className="metric-row">
+            <span>
+              Queue
+            </span>
+
+            <strong>
+              ✓
+            </strong>
+          </div>
+
+          <div className="metric-row">
+            <span>
+              Economics
+            </span>
+
+            <strong>
+              ✓
+            </strong>
+          </div>
+        </div>
+
+      </section>
+
+      {/* ERROR DURING SIMULATION */}
+      {error && (
+        <section className="dashboard-card">
           <div className="empty-state">
             <AlertTriangle size={24} />
 
             <p>{error}</p>
           </div>
-        </div>
+        </section>
       )}
 
-      <div className="dashboard-card">
+      {/* SCENARIO BUILDER */}
+      <section className="dashboard-card">
         <div className="card-header">
           <div>
             <span className="header-label">
@@ -424,6 +563,12 @@ function Simulation() {
             <h3>
               Configure What-If Scenario
             </h3>
+
+            <p>
+              Select a process improvement and
+              run it through the production
+              simulation engine.
+            </p>
           </div>
 
           <Play size={22} />
@@ -444,14 +589,276 @@ function Simulation() {
             Running Python simulation...
           </div>
         )}
-      </div>
+      </section>
 
-      <SimulationResults
-        result={result}
-      />
-
+      {/* RESULTS */}
       {result && (
         <>
+          {/* RESULT HERO */}
+          <section className="dashboard-card bottleneck-highlight">
+
+            <div className="highlight-icon">
+              <TrendingUp size={28} />
+            </div>
+
+            <div>
+              <span className="header-label">
+                SIMULATION COMPLETE
+              </span>
+
+              <h2>
+                {result.scenario}
+              </h2>
+
+              <p>
+                Modeled comparison between the
+                current production baseline and
+                the selected improvement scenario.
+              </p>
+            </div>
+
+            <div className="highlight-score">
+              <span>
+                Estimated Savings
+              </span>
+
+              <strong>
+                {formatCurrency(
+                  result.estimated_savings
+                )}
+              </strong>
+
+              <small>
+                Modeled economic reduction
+              </small>
+            </div>
+
+          </section>
+
+          {/* QUICK COMPARISON */}
+          <section className="dashboard-grid">
+
+            <div className="dashboard-card">
+              <div className="card-header">
+                <div>
+                  <span className="header-label">
+                    THROUGHPUT
+                  </span>
+
+                  <h3>
+                    Production Rate
+                  </h3>
+                </div>
+
+                <TrendingUp size={22} />
+              </div>
+
+              <div className="station-score">
+                <span>
+                  Before
+                </span>
+
+                <strong>
+                  {formatNumber(
+                    result.baseline.throughput
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  After
+                </span>
+
+                <strong>
+                  {formatNumber(
+                    result.simulated.throughput
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Change
+                </span>
+
+                <strong>
+                  {calculateChange(
+                    result.baseline.throughput,
+                    result.simulated.throughput
+                  ).toFixed(2)}
+                  %
+                </strong>
+              </div>
+            </div>
+
+            <div className="dashboard-card">
+              <div className="card-header">
+                <div>
+                  <span className="header-label">
+                    QUEUE PRESSURE
+                  </span>
+
+                  <h3>
+                    Process Queue
+                  </h3>
+                </div>
+
+                <TrendingDown size={22} />
+              </div>
+
+              <div className="station-score">
+                <span>
+                  Before
+                </span>
+
+                <strong>
+                  {formatNumber(
+                    result.baseline.queue
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  After
+                </span>
+
+                <strong>
+                  {formatNumber(
+                    result.simulated.queue
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Change
+                </span>
+
+                <strong>
+                  {calculateChange(
+                    result.baseline.queue,
+                    result.simulated.queue
+                  ).toFixed(2)}
+                  %
+                </strong>
+              </div>
+            </div>
+
+            <div className="dashboard-card">
+              <div className="card-header">
+                <div>
+                  <span className="header-label">
+                    QUALITY
+                  </span>
+
+                  <h3>
+                    Defective Parts
+                  </h3>
+                </div>
+
+                <ShieldCheck size={22} />
+              </div>
+
+              <div className="station-score">
+                <span>
+                  Before
+                </span>
+
+                <strong>
+                  {formatNumber(
+                    result.baseline.defectiveParts
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  After
+                </span>
+
+                <strong>
+                  {formatNumber(
+                    result.simulated.defectiveParts
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Defect Rate
+                </span>
+
+                <strong>
+                  {(
+                    result.simulated.defectRate *
+                    100
+                  ).toFixed(2)}
+                  %
+                </strong>
+              </div>
+            </div>
+
+            <div className="dashboard-card">
+              <div className="card-header">
+                <div>
+                  <span className="header-label">
+                    ECONOMICS
+                  </span>
+
+                  <h3>
+                    Estimated Impact
+                  </h3>
+                </div>
+
+                <IndianRupee size={22} />
+              </div>
+
+              <div className="station-score">
+                <span>
+                  Before
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    result.baseline.impact
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  After
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    result.simulated.impact
+                  )}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Estimated Reduction
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    result.estimated_savings
+                  )}
+                </strong>
+              </div>
+            </div>
+
+          </section>
+
+          {/* EXISTING COMPONENTS */}
+          <SimulationResults
+            result={result}
+          />
+
           <BeforeAfter
             before={result.before}
             after={result.after}
@@ -462,7 +869,9 @@ function Simulation() {
             simulated={result.simulated}
           />
 
-          <div className="dashboard-card">
+          {/* DECISION SUPPORT */}
+          <section className="dashboard-card">
+
             <div className="card-header">
               <div>
                 <span className="header-label">
@@ -473,63 +882,98 @@ function Simulation() {
                   Decision Support Summary
                 </h3>
               </div>
+
+              <FlaskConical size={22} />
             </div>
 
             <div className="simulation-summary">
-              <p>
-                <strong>
-                  Scenario:
-                </strong>{" "}
-                {result.scenario}
-              </p>
 
-              <p>
-                <strong>
-                  Estimated defective parts:
-                </strong>{" "}
-                {result.baseline.defectiveParts.toLocaleString()}{" "}
-                →{" "}
-                {result.simulated.defectiveParts.toLocaleString()}
-              </p>
+              <div className="summary-row">
+                <span>
+                  Scenario
+                </span>
 
-              <p>
                 <strong>
-                  Estimated economic impact:
-                </strong>{" "}
-                ₹
-                {result.baseline.impact.toLocaleString(
-                  "en-IN",
-                  {
-                    maximumFractionDigits: 2,
-                  }
-                )}{" "}
-                → ₹
-                {result.simulated.impact.toLocaleString(
-                  "en-IN",
-                  {
-                    maximumFractionDigits: 2,
-                  }
-                )}
-              </p>
+                  {result.scenario}
+                </strong>
+              </div>
 
-              <p>
+              <div className="summary-row">
+                <span>
+                  Estimated Defective Parts
+                </span>
+
                 <strong>
-                  Estimated impact reduction:
-                </strong>{" "}
-                ₹
-                {result.estimated_savings.toLocaleString(
-                  "en-IN",
-                  {
-                    maximumFractionDigits: 2,
-                  }
-                )}
-              </p>
+                  {formatNumber(
+                    result.baseline.defectiveParts
+                  )}
+                  {" → "}
+                  {formatNumber(
+                    result.simulated.defectiveParts
+                  )}
+                </strong>
+              </div>
+
+              <div className="summary-row">
+                <span>
+                  Estimated Economic Impact
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    result.baseline.impact
+                  )}
+                  {" → "}
+                  {formatCurrency(
+                    result.simulated.impact
+                  )}
+                </strong>
+              </div>
+
+              <div className="summary-row">
+                <span>
+                  Estimated Impact Reduction
+                </span>
+
+                <strong>
+                  {formatCurrency(
+                    result.estimated_savings
+                  )}
+                </strong>
+              </div>
+
             </div>
-          </div>
+
+            {result.interpretation && (
+              <div className="simulation-interpretation">
+                <span className="header-label">
+                  MODEL INTERPRETATION
+                </span>
+
+                <p>
+                  {typeof result.interpretation ===
+                  "string"
+                    ? result.interpretation
+                    : JSON.stringify(
+                        result.interpretation
+                      )}
+                </p>
+              </div>
+            )}
+
+            {result.decisionSupportNote && (
+              <small className="causality-note">
+                {result.decisionSupportNote}
+              </small>
+            )}
+
+          </section>
         </>
       )}
 
-      <div className="dashboard-card causality-warning">
+      {/* MODEL LIMITATION */}
+      <section className="dashboard-card causality-warning">
+
         <div className="warning-icon">
           <AlertTriangle size={20} />
         </div>
@@ -542,13 +986,17 @@ function Simulation() {
           <p>
             What-if results are modeled estimates
             based on configurable improvement
-            assumptions. They should be validated
-            with real production experiments before
-            operational decisions are made.
+            assumptions. They represent decision
+            support rather than guaranteed production
+            outcomes. Real production trials and
+            validated operational data should be
+            used before implementing process changes.
           </p>
         </div>
-      </div>
-    </div>
+
+      </section>
+
+    </main>
   );
 }
 

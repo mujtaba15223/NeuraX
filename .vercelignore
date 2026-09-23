@@ -1,0 +1,27 @@
+# Vercel deploys the frontend; keep local datasets and ML artifacts out of the upload.
+ai/
+analytics/
+backend/
+data/
+docs/
+notebooks/
+simulation/
+tests/
+src/
+
+# Local and generated files.
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.joblib
+*.ipynb
+
+# Frontend dependencies and build output are recreated by Vercel.
+frontend/node_modules/
+frontend/dist/

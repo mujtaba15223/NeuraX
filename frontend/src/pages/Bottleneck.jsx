@@ -4,6 +4,9 @@ import {
   Factory,
   AlertTriangle,
   BarChart3,
+  Gauge,
+  Clock3,
+  Target,
 } from "lucide-react";
 
 import { getBottleneck } from "../services/api";
@@ -110,11 +113,10 @@ function Bottleneck() {
     );
   }
 
-  const processAnalysis = Array.isArray(
-    data?.stations
-  )
-    ? data.stations
-    : [];
+  const processAnalysis =
+    Array.isArray(data?.stations)
+      ? data.stations
+      : [];
 
   const stations = processAnalysis
     .map((values, index) => ({
@@ -123,7 +125,9 @@ function Bottleneck() {
         `Station ${index + 1}`,
 
       queue: Number(
-        values?.avg_queue ?? values?.queue_time ?? 0
+        values?.avg_queue ??
+          values?.queue_time ??
+          0
       ),
 
       utilization: Number(
@@ -139,7 +143,9 @@ function Bottleneck() {
       ),
 
       score: Number(
-        values?.score ?? values?.pressure_score ?? 0
+        values?.score ??
+          values?.pressure_score ??
+          0
       ),
 
       rank:
@@ -157,26 +163,49 @@ function Bottleneck() {
   const topStation =
     stations[0] || null;
 
-  const defectAwareStations = Array.isArray(
-    data?.defect_aware_stations
-  )
-    ? data.defect_aware_stations
-        .map((values, index) => ({
-          station: values?.station || `Station ${index + 1}`,
-          score: Number(values?.defect_aware_score ?? 0),
-          adjustment: Number(values?.defect_adjustment ?? 1),
-        }))
-        .sort((a, b) => b.score - a.score)
-    : [];
+  const defectAwareStations =
+    Array.isArray(
+      data?.defect_aware_stations
+    )
+      ? data.defect_aware_stations
+          .map((values, index) => ({
+            station:
+              values?.station ||
+              `Station ${index + 1}`,
 
-  const defectAwareTop = defectAwareStations[0] || null;
+            score: Number(
+              values?.defect_aware_score ??
+                0
+            ),
+
+            adjustment: Number(
+              values?.defect_adjustment ??
+                1
+            ),
+          }))
+          .sort(
+            (a, b) =>
+              b.score - a.score
+          )
+      : [];
+
+  const defectAwareTop =
+    defectAwareStations[0] || null;
 
   const activeTopStation =
     defectAwareTop || topStation;
 
-  const isDefectAware = Boolean(
-    defectAwareTop
-  );
+  const isDefectAware =
+    Boolean(defectAwareTop);
+
+  const maxScore =
+    stations.length > 0
+      ? Math.max(
+          ...stations.map(
+            (station) => station.score
+          )
+        )
+      : 1;
 
   return (
     <div className="page-container">
@@ -188,7 +217,9 @@ function Bottleneck() {
             BOTTLENECK ANALYTICS
           </span>
 
-          <h1>Production Bottlenecks</h1>
+          <h1>
+            Production Bottlenecks
+          </h1>
 
           <p>
             Identify process stations with the
@@ -206,11 +237,9 @@ function Bottleneck() {
         </button>
       </div>
 
-
-      {/* TOP PROCESS CANDIDATE */}
+      {/* INVESTIGATION SUMMARY */}
       {activeTopStation && (
         <div className="dashboard-card bottleneck-highlight">
-
           <div className="highlight-icon">
             <AlertTriangle size={28} />
           </div>
@@ -219,16 +248,19 @@ function Bottleneck() {
             <span className="header-label">
               {isDefectAware
                 ? "DEFECT-AWARE PROCESS CANDIDATE"
-                : "BASE PROCESS CANDIDATE"}
+                : "TOP PROCESS PRESSURE CANDIDATE"}
             </span>
 
             <h2>
-              {topStation.station}
+              {activeTopStation.station}
             </h2>
 
             <p>
               {isDefectAware
-                ? `For the detected ${data.defect_type} anomaly, this station has the strongest defect-aware relevance based on measured process pressure and engineering priors.`
+                ? `For the detected ${
+                    data?.defect_type ||
+                    "anomaly"
+                  }, this station has the strongest defect-aware relevance based on measured process pressure and engineering priors.`
                 : "This station currently has the highest measured combined process-pressure score in the production flow."}
             </p>
           </div>
@@ -239,38 +271,133 @@ function Bottleneck() {
             </span>
 
             <strong>
-              {activeTopStation.score.toFixed(3)}
+              {activeTopStation.score.toFixed(
+                3
+              )}
             </strong>
 
             <small>
               {isDefectAware
                 ? "Investigation signal"
-                : `Rank #${activeTopStation.rank}`}
+                : "Highest process score"}
             </small>
           </div>
-
         </div>
       )}
 
+      {/* KEY METRICS */}
+      {topStation && (
+        <div className="dashboard-grid">
 
-      {/* NO DATA */}
-      {!activeTopStation && (
-        <div className="dashboard-card">
-          <div className="empty-state">
-            <BarChart3 size={30} />
+          <div className="dashboard-card">
+            <div className="card-header">
+              <div>
+                <span className="header-label">
+                  TOP CONSTRAINT
+                </span>
 
-            <h3>
-              No Process Data
-            </h3>
+                <h3>
+                  {topStation.station}
+                </h3>
+              </div>
 
-            <p>
-              The backend returned no station-level
-              bottleneck analysis.
+              <Factory size={22} />
+            </div>
+
+            <div className="station-score">
+              <span>
+                Combined Pressure
+              </span>
+
+              <strong>
+                {topStation.score.toFixed(3)}
+              </strong>
+            </div>
+
+            <p className="control-description">
+              Highest combined queue and
+              utilization pressure among the
+              analyzed stations.
             </p>
+          </div>
+
+          <div className="dashboard-card">
+            <div className="card-header">
+              <div>
+                <span className="header-label">
+                  QUEUE SIGNAL
+                </span>
+
+                <h3>
+                  {topStation.queue.toFixed(3)}
+                </h3>
+              </div>
+
+              <Clock3 size={22} />
+            </div>
+
+            <p className="control-description">
+              Average queue measurement for the
+              top process-pressure candidate.
+            </p>
+
+            <div className="metric-row">
+              <span>
+                Queue Pressure
+              </span>
+
+              <strong>
+                {(
+                  topStation.queuePressure *
+                  100
+                ).toFixed(1)}
+                %
+              </strong>
+            </div>
+          </div>
+
+          <div className="dashboard-card">
+            <div className="card-header">
+              <div>
+                <span className="header-label">
+                  UTILIZATION SIGNAL
+                </span>
+
+                <h3>
+                  {(
+                    topStation.utilization *
+                    100
+                  ).toFixed(1)}
+                  %
+                </h3>
+              </div>
+
+              <Gauge size={22} />
+            </div>
+
+            <p className="control-description">
+              Measured station utilization for
+              the top process-pressure candidate.
+            </p>
+
+            <div className="metric-row">
+              <span>
+                Utilization Pressure
+              </span>
+
+              <strong>
+                {(
+                  topStation.utilizationPressure *
+                  100
+                ).toFixed(1)}
+                %
+              </strong>
+            </div>
           </div>
         </div>
       )}
 
+      {/* DEFECT-AWARE ANALYSIS */}
       {defectAwareStations.length > 0 && (
         <div className="dashboard-card">
           <div className="card-header">
@@ -278,146 +405,172 @@ function Bottleneck() {
               <span className="header-label">
                 DEFECT-AWARE PROCESS RELEVANCE
               </span>
+
               <h3>
-                {data.defect_type || "Detected anomaly"} investigation signal
+                {data?.defect_type ||
+                  "Detected anomaly"}{" "}
+                Investigation Signal
               </h3>
             </div>
-            <AlertTriangle size={22} />
+
+            <Target size={22} />
           </div>
 
           <p>
-            This layer applies engineering priors to the measured process
-            pressure. It is an investigation hypothesis, not proof of cause.
+            This layer combines measured process
+            pressure with engineering priors for
+            the detected defect. It is an
+            investigation hypothesis, not proof
+            of causality.
           </p>
 
           <div className="impact-list">
-            {defectAwareStations.map((station) => (
-              <div key={station.station}>
-                <span>{station.station}</span>
-                <strong>{station.score.toFixed(3)}</strong>
-              </div>
-            ))}
+            {defectAwareStations.map(
+              (station, index) => (
+                <div
+                  key={station.station}
+                >
+                  <span>
+                    #{index + 1}{" "}
+                    {station.station}
+                  </span>
+
+                  <strong>
+                    {station.score.toFixed(3)}
+                  </strong>
+                </div>
+              )
+            )}
           </div>
 
           {defectAwareTop && (
             <small className="causality-note">
-              Strongest defect-aware process candidate: {defectAwareTop.station}.
+              Strongest defect-aware process
+              candidate:{" "}
+              <strong>
+                {defectAwareTop.station}
+              </strong>
+              .
             </small>
           )}
         </div>
       )}
 
-
       {/* STATION CARDS */}
       <div className="dashboard-grid">
+        {stations.map((station) => {
+          const scorePercent =
+            maxScore > 0
+              ? Math.min(
+                  100,
+                  (station.score /
+                    maxScore) *
+                    100
+                )
+              : 0;
 
-        {stations.map((station) => (
+          return (
+            <div
+              className={`dashboard-card station-card ${
+                station.rank === 1
+                  ? "top-process-row"
+                  : ""
+              }`}
+              key={station.station}
+            >
+              <div className="card-header">
+                <div>
+                  <span className="header-label">
+                    STATION #{station.rank}
+                  </span>
 
-          <div
-            className="dashboard-card station-card"
-            key={station.station}
-          >
+                  <h3>
+                    {station.station}
+                  </h3>
+                </div>
 
-            <div className="card-header">
-
-              <div>
-                <span className="header-label">
-                  STATION #{station.rank}
-                </span>
-
-                <h3>
-                  {station.station}
-                </h3>
+                <Factory size={22} />
               </div>
 
-              <Factory size={22} />
+              <div className="station-score">
+                <span>
+                  Pressure Score
+                </span>
 
+                <strong>
+                  {station.score.toFixed(3)}
+                </strong>
+              </div>
+
+              <div className="flow-progress">
+                <div
+                  className="flow-progress-bar"
+                  style={{
+                    width: `${scorePercent}%`,
+                  }}
+                />
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Average Queue
+                </span>
+
+                <strong>
+                  {station.queue.toFixed(3)}
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Utilization
+                </span>
+
+                <strong>
+                  {(
+                    station.utilization *
+                    100
+                  ).toFixed(1)}
+                  %
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Queue Pressure
+                </span>
+
+                <strong>
+                  {(
+                    station.queuePressure *
+                    100
+                  ).toFixed(1)}
+                  %
+                </strong>
+              </div>
+
+              <div className="metric-row">
+                <span>
+                  Utilization Pressure
+                </span>
+
+                <strong>
+                  {(
+                    station.utilizationPressure *
+                    100
+                  ).toFixed(1)}
+                  %
+                </strong>
+              </div>
             </div>
-
-
-            <div className="station-score">
-
-              <span>
-                Pressure Score
-              </span>
-
-              <strong>
-                {station.score.toFixed(3)}
-              </strong>
-
-            </div>
-
-
-            <div className="metric-row">
-
-              <span>
-                Average Queue
-              </span>
-
-              <strong>
-                {station.queue.toFixed(3)}
-              </strong>
-
-            </div>
-
-
-            <div className="metric-row">
-
-              <span>
-                Utilization
-              </span>
-
-              <strong>
-                {(station.utilization * 100).toFixed(1)}
-                %
-              </strong>
-
-            </div>
-
-
-            <div className="metric-row">
-
-              <span>
-                Queue Pressure
-              </span>
-
-              <strong>
-                {(station.queuePressure * 100).toFixed(1)}
-                %
-              </strong>
-
-            </div>
-
-
-            <div className="metric-row">
-
-              <span>
-                Utilization Pressure
-              </span>
-
-              <strong>
-                {(
-                  station.utilizationPressure * 100
-                ).toFixed(1)}
-                %
-              </strong>
-
-            </div>
-
-          </div>
-
-        ))}
-
+          );
+        })}
       </div>
-
 
       {/* COMPARISON TABLE */}
       {stations.length > 0 && (
-
         <div className="dashboard-card">
-
           <div className="card-header">
-
             <div>
               <span className="header-label">
                 PROCESS PRESSURE
@@ -429,14 +582,10 @@ function Bottleneck() {
             </div>
 
             <BarChart3 size={22} />
-
           </div>
 
-
           <div className="table-wrapper">
-
             <table className="data-table">
-
               <thead>
                 <tr>
                   <th>Rank</th>
@@ -449,76 +598,180 @@ function Bottleneck() {
                 </tr>
               </thead>
 
-
               <tbody>
+                {stations.map(
+                  (station) => (
+                    <tr
+                      key={
+                        station.station
+                      }
+                    >
+                      <td>
+                        #{station.rank}
+                      </td>
 
-                {stations.map((station) => (
+                      <td>
+                        <strong>
+                          {station.station}
+                        </strong>
+                      </td>
 
-                  <tr
-                    key={station.station}
-                  >
+                      <td>
+                        {station.queue.toFixed(
+                          3
+                        )}
+                      </td>
 
-                    <td>
-                      #{station.rank}
-                    </td>
+                      <td>
+                        {(
+                          station.utilization *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </td>
 
-                    <td>
-                      <strong>
-                        {station.station}
-                      </strong>
-                    </td>
+                      <td>
+                        {(
+                          station.queuePressure *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </td>
 
-                    <td>
-                      {station.queue.toFixed(3)}
-                    </td>
+                      <td>
+                        {(
+                          station.utilizationPressure *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </td>
 
-                    <td>
-                      {(station.utilization * 100).toFixed(1)}
-                      %
-                    </td>
-
-                    <td>
-                      {(station.queuePressure * 100).toFixed(1)}
-                      %
-                    </td>
-
-                    <td>
-                      {(
-                        station.utilizationPressure * 100
-                      ).toFixed(1)}
-                      %
-                    </td>
-
-                    <td>
-                      <strong>
-                        {station.score.toFixed(3)}
-                      </strong>
-                    </td>
-
-                  </tr>
-
-                ))}
-
+                      <td>
+                        <strong>
+                          {station.score.toFixed(
+                            3
+                          )}
+                        </strong>
+                      </td>
+                    </tr>
+                  )
+                )}
               </tbody>
-
             </table>
-
           </div>
-
         </div>
-
       )}
 
+      {/* METHODOLOGY */}
+      <div className="dashboard-card">
+        <div className="card-header">
+          <div>
+            <span className="header-label">
+              DECISION LOGIC
+            </span>
+
+            <h3>
+              How Bottleneck Pressure Is Evaluated
+            </h3>
+          </div>
+
+          <BarChart3 size={22} />
+        </div>
+
+        <div className="analysis-flow">
+          <div className="flow-step">
+            <span className="flow-number">
+              01
+            </span>
+
+            <div>
+              <strong>
+                Queue Evidence
+              </strong>
+
+              <p>
+                Measure the relative queue
+                pressure at each production
+                station.
+              </p>
+            </div>
+          </div>
+
+          <div className="flow-arrow">
+            →
+          </div>
+
+          <div className="flow-step">
+            <span className="flow-number">
+              02
+            </span>
+
+            <div>
+              <strong>
+                Utilization Evidence
+              </strong>
+
+              <p>
+                Measure relative station
+                utilization to identify capacity
+                pressure.
+              </p>
+            </div>
+          </div>
+
+          <div className="flow-arrow">
+            →
+          </div>
+
+          <div className="flow-step">
+            <span className="flow-number">
+              03
+            </span>
+
+            <div>
+              <strong>
+                Combined Pressure
+              </strong>
+
+              <p>
+                Combine queue and utilization
+                signals into a comparable station
+                pressure score.
+              </p>
+            </div>
+          </div>
+
+          <div className="flow-arrow">
+            →
+          </div>
+
+          <div className="flow-step">
+            <span className="flow-number">
+              04
+            </span>
+
+            <div>
+              <strong>
+                Constraint Candidate
+              </strong>
+
+              <p>
+                Rank stations to identify where
+                engineering investigation may
+                provide the most value.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* CAUSALITY WARNING */}
       <div className="dashboard-card causality-warning">
-
         <div className="warning-icon">
           <AlertTriangle size={20} />
         </div>
 
         <div>
-
           <strong>
             Bottleneck Interpretation
           </strong>
@@ -526,15 +779,15 @@ function Bottleneck() {
           <p>
             A high pressure score identifies a
             process constraint candidate based on
-            queue and utilization evidence. It does
-            not by itself prove that the station is
-            the cause of a product defect.
+            queue and utilization evidence. It
+            does not by itself prove that the
+            station caused a product defect.
+            Bottleneck analysis should be combined
+            with visual and process evidence before
+            taking corrective action.
           </p>
-
         </div>
-
       </div>
-
     </div>
   );
 }
