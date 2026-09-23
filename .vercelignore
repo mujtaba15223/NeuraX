@@ -1,13 +1,13 @@
 # Vercel deploys the frontend; keep local datasets and ML artifacts out of the upload.
-ai/
-analytics/
-backend/
-data/
-docs/
-notebooks/
-simulation/
-tests/
-src/
+/ai/
+/analytics/
+/backend/
+/data/
+/docs/
+/notebooks/
+/simulation/
+/tests/
+/src/
 
 # Local and generated files.
 .git/
